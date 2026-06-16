@@ -275,6 +275,34 @@ To add API details, open `API Settings` in the web interface and enter:
 
 The settings are saved in the mounted `data` directory.
 
+Creating a Read-Only TrueNAS API Key
+
+The API key is only used for optional pool, spare, and unused-disk labels. The app does not need API permission to change disks, pools, datasets, services, users, or system settings.
+
+The API calls used by this app are read-only:
+
+•	`GET /api/v2.0/disk`
+
+•	`GET /api/v2.0/pool`
+
+•	`GET /api/v2.0/boot/get_disks` or `POST /api/v2.0/core/call` with `boot.get_disks`
+
+Recommended setup:
+
+1. In the TrueNAS UI, create or choose a dedicated user for this app, for example `truenas_disk_map_ro`.
+
+2. Give that user the most limited read-only role available in your TrueNAS version. It only needs to read disk, pool, and boot-disk metadata.
+
+3. Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
+
+4. Open `Credentials` / `API Keys` in the TrueNAS UI. In some versions this is under the user credentials area.
+
+5. Create a new key for the dedicated read-only user and copy it immediately. TrueNAS usually only shows the key once.
+
+6. In this app, open `API Settings`, enter `https://TRUENAS_IP/api/v2.0`, paste the key, and save.
+
+If your TrueNAS version does not expose a clear read-only role for API keys, leave the API settings empty. The app will still map slots, read SMART data, detect SES, and control identify LEDs; it will only skip pool/spare/unused labels.
+
 ________________________________________
 
 Updating the Container
