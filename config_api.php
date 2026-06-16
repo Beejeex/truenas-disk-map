@@ -1,12 +1,10 @@
 <?php
-/*
-config_api.php
+require_once __DIR__ . "/api_config_store.php";
 
-TRUENASIP /ui/credentials/users/api-keys
-*/
+$tdm_api_config = tdm_load_api_config();
 
-// API TrueNAS
-$API_URL = "https://xxxxxxxxxxxxxxx/api/v2.0";
-$API_KEY = "api key here with the number first like 1-xxxx ";
-$VERIFY_TLS = false;
+$API_URL = $tdm_api_config['api_url'];
+$API_KEY = $tdm_api_config['api_key'];
+$VERIFY_TLS = $tdm_api_config['verify_tls'];
 
+?>

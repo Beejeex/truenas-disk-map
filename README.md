@@ -221,42 +221,21 @@ Example:
 ssh truenas_admin@YOUR_TRUENAS_IP
 ```
 
-2. Create a persistent config directory.
+2. Create a persistent data directory.
 
 Choose a dataset/path that exists on your TrueNAS system. Example:
 
 ```bash
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas_interface
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas_interface/data
 ```
 
-3. Create `config_api.php`.
-
-Replace `TRUENAS_IP_OR_HOSTNAME` and `YOUR_API_KEY_HERE` with your TrueNAS API details.
-
-```bash
-sudo tee /mnt/YOUR_POOL/apps/truenas_interface/config_api.php >/dev/null <<'PHP'
-<?php
-$API_URL = "https://TRUENAS_IP_OR_HOSTNAME/api/v2.0";
-$API_KEY = "YOUR_API_KEY_HERE";
-$VERIFY_TLS = false;
-PHP
-```
-
-4. Pull the image.
+3. Pull the image.
 
 ```bash
 sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-If the package is private and the pull is denied, log in to GitHub Container Registry first:
-
-```bash
-sudo docker login ghcr.io
-```
-
-Use a GitHub token with `read:packages` permission.
-
-5. Start the container.
+4. Start the container.
 
 ```bash
 sudo docker rm -f truenas_interface 2>/dev/null || true
@@ -267,12 +246,12 @@ sudo docker run -d \
   -p 8585:80 \
   -v /dev:/dev \
   -v /etc/localtime:/etc/localtime:ro \
-  -v /mnt/YOUR_POOL/apps/truenas_interface/config_api.php:/var/www/html/config_api.php:ro \
+  -v /mnt/YOUR_POOL/apps/truenas_interface/data:/var/www/html/data \
   --privileged \
   ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-6. Open the interface.
+5. Open the interface.
 
 ```text
 http://TRUENAS_IP:8585
@@ -285,6 +264,16 @@ http://192.168.1.10:8585
 ```
 
 After opening the interface, click `Refresh` to generate the disk map files.
+
+The TrueNAS API is optional. Without it, the app still maps slots, reads SMART data, detects SES, and controls identify LEDs. Pool, spare, and unused labels are skipped until API settings are configured.
+
+To add API details, open `API Settings` in the web interface and enter:
+
+•	API URL, for example `https://TRUENAS_IP/api/v2.0`
+
+•	API key from `Credentials` / `API Keys` in the TrueNAS UI
+
+The settings are saved in the mounted `data` directory.
 
 ________________________________________
 
@@ -303,7 +292,7 @@ sudo docker run -d \
   -p 8585:80 \
   -v /dev:/dev \
   -v /etc/localtime:/etc/localtime:ro \
-  -v /mnt/YOUR_POOL/apps/truenas_interface/config_api.php:/var/www/html/config_api.php:ro \
+  -v /mnt/YOUR_POOL/apps/truenas_interface/data:/var/www/html/data \
   --privileged \
   ghcr.io/beejeex/truenas-disk-map:latest
 ```
@@ -311,7 +300,7 @@ sudo docker run -d \
 For a pinned build, use the commit tag:
 
 ```bash
-ghcr.io/beejeex/truenas-disk-map:e0fd2f1
+ghcr.io/beejeex/truenas-disk-map:COMMIT_SHA
 ```
 
 ________________________________________
@@ -326,7 +315,7 @@ cd truenas-disk-map
 sudo docker build -t truenas_interface .
 ```
 
-Then run it with the same `/dev`, localtime, config mount, and `--privileged` options shown above, replacing the image name with `truenas_interface`.
+Then run it with the same `/dev`, localtime, data mount, and `--privileged` options shown above, replacing the image name with `truenas_interface`.
 
 ________________________________________
 Language

@@ -6,10 +6,23 @@
 // ====== CONFIG ======
 require_once __DIR__ . "/config_api.php";
 
-
-
 $target_dir = __DIR__ . "/hdd_controlere";
 $target_file = $target_dir . "/disk_per_pool.txt";
+
+if (!is_dir($target_dir))
+{
+    if (!mkdir($target_dir, 0775, true))
+    {
+        throw new RuntimeException("Could not create directory: " . $target_dir);
+    }
+}
+
+if (!tdm_api_configured())
+{
+    file_put_contents($target_file, "[]\n");
+    echo "[INFO] TrueNAS API is not configured; pool labels were skipped.\n";
+    return;
+}
 
 // ====== HELPER: apel API GET ======
 function truenas_api_get($url, $api_key, $verify_tls)
@@ -44,33 +57,25 @@ function truenas_api_get($url, $api_key, $verify_tls)
 
     if ($errno !== 0)
     {
-        die("Eroare cURL ($errno): $err\n");
+        throw new RuntimeException("cURL error ($errno): $err");
     }
 
     if ($code < 200 || $code >= 300)
     {
-        die("Eroare HTTP $code la $url\nRaspuns: " . $resp . "\n");
+        throw new RuntimeException("HTTP $code for $url. Response: " . $resp);
     }
 
     return $resp;
 }
 
 // ====== MAIN ======
-if (!is_dir($target_dir))
-{
-    if (!mkdir($target_dir, 0775, true))
-    {
-        die("Eroare: nu pot crea directorul: " . $target_dir . "\n");
-    }
-}
-
 // 1) Luam lista de pool-uri (include si topologia in mod normal)
 $pools_json = truenas_api_get($API_URL . "/pool", $API_KEY, $VERIFY_TLS);
 $pools = json_decode($pools_json, true);
 
 if (!is_array($pools))
 {
-    die("Eroare: raspuns pool invalid sau non-JSON.\n");
+    throw new RuntimeException("Invalid or non-JSON /pool response.");
 }
 
 $result = array();
@@ -166,13 +171,13 @@ foreach ($pools as $pool)
 $pretty = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 if ($pretty === false)
 {
-    die("Eroare la json_encode: " . json_last_error_msg() . "\n");
+    throw new RuntimeException("json_encode failed: " . json_last_error_msg());
 }
 
 $f = fopen($target_file, "w");
 if ($f === false)
 {
-    die("Eroare: nu pot deschide fisierul pentru scriere: " . $target_file . "\n");
+    throw new RuntimeException("Could not open file for writing: " . $target_file);
 }
 fwrite($f, $pretty . "\n");
 fclose($f);

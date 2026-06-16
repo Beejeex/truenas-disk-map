@@ -10,6 +10,7 @@ return array(
     'last_update.stale' => 'Warning: information is older than 24h.',
     'status.ok' => 'OK',
     'refresh.button' => 'Refresh (takes a few minutes)',
+    'api.button' => 'API Settings',
 
     'display.options' => 'Display options',
     'display.hide_full_pool_names' => 'Hide full pool names',
@@ -70,6 +71,15 @@ return array(
     'refresh.title' => 'Refresh SES files',
     'refresh.running' => 'Running... this can take a few minutes',
     'button.reload' => 'Reload',
+    'api.title' => 'TrueNAS API Settings',
+    'api.url' => 'API URL',
+    'api.key' => 'API Key',
+    'api.key_placeholder' => 'Leave blank to keep existing key',
+    'api.verify_tls' => 'Verify TLS certificate',
+    'api.status_configured' => 'Configured',
+    'api.status_not_configured' => 'Not configured',
+    'button.save' => 'Save',
+    'button.disable' => 'Disable',
 
     'js.device_unknown' => 'Unknown device.',
     'js.smart_running' => 'Running smartctl -x {device} ...',
@@ -80,4 +90,8 @@ return array(
     'js.http_error' => 'HTTP error {status}:',
     'js.refresh_error' => 'Refresh failed ({status}):',
     'js.completed' => 'Finished successfully',
+    'js.api_load_error' => 'Could not load API settings.',
+    'js.api_save_error' => 'Could not save API settings.',
+    'js.api_saved' => 'API settings saved.',
+    'js.api_disabled' => 'API settings disabled.',
 );

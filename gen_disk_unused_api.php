@@ -7,10 +7,23 @@
 // ====== CONFIG ======
 require_once __DIR__ . "/config_api.php";
 
-
-
 $target_dir  = __DIR__ . "/hdd_controlere";
 $target_file = $target_dir . "/disk_unused_no_pool.txt";
+
+if (!is_dir($target_dir))
+{
+    if (!mkdir($target_dir, 0775, true))
+    {
+        throw new RuntimeException("Could not create directory: " . $target_dir);
+    }
+}
+
+if (!tdm_api_configured())
+{
+    file_put_contents($target_file, "");
+    echo "[INFO] TrueNAS API is not configured; unused disk labels were skipped.\n";
+    return;
+}
 
 // ====== Functii helper ======
 function api_request_get($url, $api_key, $verify_tls)
@@ -44,11 +57,11 @@ function api_request_get($url, $api_key, $verify_tls)
 
     if ($errno !== 0)
     {
-        die("Eroare cURL GET ($errno): $err\n");
+        throw new RuntimeException("cURL GET error ($errno): $err");
     }
     if ($code < 200 || $code >= 300)
     {
-        die("Eroare HTTP $code la GET $url\nRaspuns: " . $resp . "\n");
+        throw new RuntimeException("HTTP $code for GET $url. Response: " . $resp);
     }
 
     return $resp;
@@ -72,7 +85,7 @@ function api_request_post($url, $api_key, $verify_tls, $payload_array_or_null)
         $payload = json_encode($payload_array_or_null);
         if ($payload === false)
         {
-            die("Eroare json_encode payload POST.\n");
+            throw new RuntimeException("json_encode payload failed.");
         }
     }
 
@@ -101,11 +114,11 @@ function api_request_post($url, $api_key, $verify_tls, $payload_array_or_null)
 
     if ($errno !== 0)
     {
-        die("Eroare cURL POST ($errno): $err\n");
+        throw new RuntimeException("cURL POST error ($errno): $err");
     }
     if ($code < 200 || $code >= 300)
     {
-        die("Eroare HTTP $code la POST $url\nRaspuns: " . $resp . "\n");
+        throw new RuntimeException("HTTP $code for POST $url. Response: " . $resp);
     }
 
     return $resp;
@@ -150,18 +163,10 @@ function collect_disks_from_vdev_list($vdev_list, &$set_assoc)
 }
 
 // ====== MAIN ======
-if (!is_dir($target_dir))
-{
-    if (!mkdir($target_dir, 0775, true))
-    {
-        die("Eroare: nu pot crea directorul: " . $target_dir . "\n");
-    }
-}
-
 // 1) Toate disk-urile: /disk
 $disks_json = api_request_get($API_URL . "/disk", $API_KEY, $VERIFY_TLS);
 $disks_arr  = json_decode($disks_json, true);
-if (!is_array($disks_arr)) die("Eroare: raspuns /disk invalid.\n");
+if (!is_array($disks_arr)) throw new RuntimeException("Invalid /disk response.");
 
 $all_disks_set = array();
 foreach ($disks_arr as $d)
@@ -175,7 +180,7 @@ foreach ($disks_arr as $d)
 // 2) Pool-uri: /pool
 $pools_json = api_request_get($API_URL . "/pool", $API_KEY, $VERIFY_TLS);
 $pools      = json_decode($pools_json, true);
-if (!is_array($pools)) die("Eroare: raspuns /pool invalid.\n");
+if (!is_array($pools)) throw new RuntimeException("Invalid /pool response.");
 
 // 3) BOOT disks: incercam GET, fallback POST /core/call
 $boot_arr  = array();
@@ -240,7 +245,7 @@ foreach ($all_disks_set as $disk_name => $_v)
 sort($unused_list, SORT_STRING);
 
 $f = fopen($target_file, "w");
-if ($f === false) die("Eroare: nu pot deschide fisierul pentru scriere: " . $target_file . "\n");
+if ($f === false) throw new RuntimeException("Could not open file for writing: " . $target_file);
 
 foreach ($unused_list as $name)
 {

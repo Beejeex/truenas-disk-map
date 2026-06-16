@@ -429,7 +429,10 @@ foreach ($files as $file)
     <button id="btnRegen" type="button" class="btn btn-sm btn-outline-info ml-3">
     <?php echo tdm_h('refresh.button'); ?>
   </button>
-  
+  <button id="btnApiSettings" type="button" class="btn btn-sm btn-outline-light ml-2">
+    <?php echo tdm_h('api.button'); ?>
+  </button>
+
 </div>
 
 
@@ -932,6 +935,53 @@ foreach ($files as $file)
 </div>
 
 
+<!-- Modal API Settings -->
+<div class="modal fade" id="apiSettingsModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content" style="background:#1f2330;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
+      <div class="modal-header">
+        <h5 class="modal-title"><?php echo tdm_h('api.title'); ?></h5>
+        <button type="button" class="close text-light" data-dismiss="modal" aria-label="<?php echo tdm_h('modal.close'); ?>">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <form id="apiSettingsForm">
+          <div class="form-group">
+            <label for="apiUrl"><?php echo tdm_h('api.url'); ?></label>
+            <input id="apiUrl" name="api_url" type="url" class="form-control form-control-sm"
+                   placeholder="https://truenas.example.local/api/v2.0">
+          </div>
+
+          <div class="form-group">
+            <label for="apiKey"><?php echo tdm_h('api.key'); ?></label>
+            <input id="apiKey" name="api_key" type="password" class="form-control form-control-sm"
+                   placeholder="<?php echo tdm_h('api.key_placeholder'); ?>">
+          </div>
+
+          <div class="custom-control custom-checkbox">
+            <input id="apiVerifyTls" name="verify_tls" type="checkbox" class="custom-control-input">
+            <label class="custom-control-label" for="apiVerifyTls"><?php echo tdm_h('api.verify_tls'); ?></label>
+          </div>
+
+          <div class="mt-3 small text-muted">
+            <span id="apiStatusText"><?php echo tdm_h('api.status_not_configured'); ?></span>
+            <span id="apiKeyMasked" class="ml-2"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button id="apiDisable" type="button" class="btn btn-outline-warning btn-sm"><?php echo tdm_h('button.disable'); ?></button>
+        <button id="apiSave" type="button" class="btn btn-success btn-sm"><?php echo tdm_h('button.save'); ?></button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal"><?php echo tdm_h('modal.close'); ?></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
 
 <!-- JS: jQuery + Popper + Bootstrap 4 -->
@@ -950,6 +1000,12 @@ var TDM_I18N = <?php echo json_encode(array(
   'js.http_error' => tdm_t('js.http_error'),
   'js.refresh_error' => tdm_t('js.refresh_error'),
   'js.completed' => tdm_t('js.completed'),
+  'js.api_load_error' => tdm_t('js.api_load_error'),
+  'js.api_save_error' => tdm_t('js.api_save_error'),
+  'js.api_saved' => tdm_t('js.api_saved'),
+  'js.api_disabled' => tdm_t('js.api_disabled'),
+  'api.status_configured' => tdm_t('api.status_configured'),
+  'api.status_not_configured' => tdm_t('api.status_not_configured'),
   'smart.output.title' => tdm_t('smart.output.title')
 ), JSON_UNESCAPED_SLASHES); ?>;
 
@@ -1186,6 +1242,75 @@ $(function(){
 
   $btnOpen.on('click', startRun);
   $btnReload.on('click', function(){ location.reload(); });
+})();
+</script>
+
+<script>
+(function(){
+  var $modal = $('#apiSettingsModal');
+  var $open = $('#btnApiSettings');
+  var $save = $('#apiSave');
+  var $disable = $('#apiDisable');
+  var $url = $('#apiUrl');
+  var $key = $('#apiKey');
+  var $verify = $('#apiVerifyTls');
+  var $status = $('#apiStatusText');
+  var $masked = $('#apiKeyMasked');
+
+  function setBusy(busy){
+    $save.prop('disabled', busy);
+    $disable.prop('disabled', busy);
+  }
+
+  function applySettings(data){
+    $url.val(data.api_url || '');
+    $key.val('');
+    $verify.prop('checked', !!data.verify_tls);
+    $status.text(data.configured ? tdmMsg('api.status_configured') : tdmMsg('api.status_not_configured'));
+    $masked.text(data.api_key_masked ? '(' + data.api_key_masked + ')' : '');
+  }
+
+  function loadSettings(){
+    setBusy(true);
+    $.getJSON('api_settings.php')
+      .done(applySettings)
+      .fail(function(xhr){
+        alert(tdmMsg('js.api_load_error') + '\n' + (xhr.responseText || xhr.status));
+      })
+      .always(function(){ setBusy(false); });
+  }
+
+  function saveSettings(action){
+    setBusy(true);
+    $.ajax({
+      url: 'api_settings.php',
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        action: action || 'save',
+        api_url: $url.val(),
+        api_key: $key.val(),
+        verify_tls: $verify.is(':checked') ? '1' : '0'
+      }
+    })
+    .done(function(data){
+      applySettings(data);
+      alert(action === 'disable' ? tdmMsg('js.api_disabled') : tdmMsg('js.api_saved'));
+    })
+    .fail(function(xhr){
+      var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.responseText || xhr.status);
+      alert(tdmMsg('js.api_save_error') + '\n' + msg);
+    })
+    .always(function(){ setBusy(false); });
+  }
+
+  $open.on('click', function(){
+    $modal.modal('show');
+    loadSettings();
+  });
+
+  $save.on('click', function(){ saveSettings('save'); });
+  $disable.on('click', function(){ saveSettings('disable'); });
 })();
 </script>
 
