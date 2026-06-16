@@ -199,116 +199,135 @@ The code is functional but still evolving and may require adjustments depending 
 
 ________________________________________
 
-Installation
+Installation from TrueNAS Shell
 
-The easiest way to run the project is using Docker directly on the TrueNAS host.
+The easiest deployment path is to pull the prebuilt image from GitHub Container Registry directly on the TrueNAS host.
 
-The interface needs access to:
+The container still needs:
 
-•	/dev (for smartctl / sg_ses)
+•	`/dev` access for `smartctl`, `lsscsi`, `sas3ircu`, and `sg_ses`
 
-•	system time
+•	system time from the host
 
-•	privileged mode for hardware commands
+•	`--privileged`, because SES devices such as `/dev/sg25` may be root-only
 
-________________________________________
+Inside the image, the web process cannot run arbitrary hardware commands. It can only use the read-only wrappers for inventory/SMART plus the LED identify wrapper for `sg_ses --set=ident` and `sg_ses --clear=ident`.
 
-Installation
-
-The easiest way to run the project is using Docker directly on the TrueNAS host.
-
-The interface needs access to:
-
-•	/dev (for smartctl / sg_ses)
-
-•	system time
-
-•	privileged mode for hardware commands
-
-
-1. Connect to TrueNAS via SSH
-   
-Login to your TrueNAS system:
-
-ssh truenas_admin@YOUR_TRUENAS_IP
-
-3. Create a working directory
-Create a folder where the project will live.
+1. Open a TrueNAS shell or connect over SSH.
 
 Example:
 
-mkdir -p /home/truenas_admin/dockere/truenas_interface
-
-
-Enter the folder:
-
-cd /home/truenas_admin/dockere/truenas_interface
-
-5. Upload the project files
-   
-Upload all project files into this directory.
-
-You can use:
-
-•	SCP
-
-•	SFTP
-
-•	WinSCP
-
-•	Mobaxterm (im using this , I like it more)
-
-
-7. Build the Docker image
-•	Inside the project directory run:
-sudo docker build -t truenas_interface .
-
-
-8. Run the container
-Run the container with hardware access:
+```bash
+ssh truenas_admin@YOUR_TRUENAS_IP
 ```
+
+2. Create a persistent config directory.
+
+Choose a dataset/path that exists on your TrueNAS system. Example:
+
+```bash
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas_interface
+```
+
+3. Create `config_api.php`.
+
+Replace `TRUENAS_IP_OR_HOSTNAME` and `YOUR_API_KEY_HERE` with your TrueNAS API details.
+
+```bash
+sudo tee /mnt/YOUR_POOL/apps/truenas_interface/config_api.php >/dev/null <<'PHP'
+<?php
+$API_URL = "https://TRUENAS_IP_OR_HOSTNAME/api/v2.0";
+$API_KEY = "YOUR_API_KEY_HERE";
+$VERIFY_TLS = false;
+PHP
+```
+
+4. Pull the image.
+
+```bash
+sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
+```
+
+If the package is private and the pull is denied, log in to GitHub Container Registry first:
+
+```bash
+sudo docker login ghcr.io
+```
+
+Use a GitHub token with `read:packages` permission.
+
+5. Start the container.
+
+```bash
+sudo docker rm -f truenas_interface 2>/dev/null || true
+
 sudo docker run -d \
---name truenas_interface \
---restart unless-stopped \
--p 8585:80 \
--v /dev:/dev \
--v /etc/localtime:/etc/localtime:ro \
---privileged \
-truenas_interface
+  --name truenas_interface \
+  --restart unless-stopped \
+  -p 8585:80 \
+  -v /dev:/dev \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /mnt/YOUR_POOL/apps/truenas_interface/config_api.php:/var/www/html/config_api.php:ro \
+  --privileged \
+  ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-7. Open the interface
-Open your browser:
-```
+6. Open the interface.
+
+```text
 http://TRUENAS_IP:8585
 ```
+
 Example:
-```
+
+```text
 http://192.168.1.10:8585
 ```
 
+After opening the interface, click `Refresh` to generate the disk map files.
+
 ________________________________________
 
-Optional: Development mode (no rebuild needed)
-If you want to modify the interface without rebuilding the container, you can mount the web folder.
-Example:
-```
+Updating the Container
+
+From the TrueNAS shell:
+
+```bash
+sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
+
+sudo docker rm -f truenas_interface
+
 sudo docker run -d \
---name truenas_interface \
---restart unless-stopped \
--p 8585:80 \
--v /dev:/dev \
--v /etc/localtime:/etc/localtime:ro \
--v /home/truenas_admin/dockere/truenas_interface:/var/www/html \
---privileged \
-truenas_interface
+  --name truenas_interface \
+  --restart unless-stopped \
+  -p 8585:80 \
+  -v /dev:/dev \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /mnt/YOUR_POOL/apps/truenas_interface/config_api.php:/var/www/html/config_api.php:ro \
+  --privileged \
+  ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-Now every modification you make in:
+For a pinned build, use the commit tag:
+
+```bash
+ghcr.io/beejeex/truenas-disk-map:e0fd2f1
 ```
-  /home/truenas_admin/dockere/truenas_interface
+
+________________________________________
+
+Optional: Build from Source
+
+Use this only if you want to modify the code locally on the TrueNAS host.
+
+```bash
+git clone https://github.com/Beejeex/truenas-disk-map.git
+cd truenas-disk-map
+sudo docker build -t truenas_interface .
 ```
-will be instantly visible in the web interface without rebuilding the container.
+
+Then run it with the same `/dev`, localtime, config mount, and `--privileged` options shown above, replacing the image name with `truenas_interface`.
+
 ________________________________________
 Language
 
