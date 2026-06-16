@@ -1,15 +1,21 @@
 <?php
 // smart_run.php
+require_once __DIR__ . "/hardware_helpers.php";
+
 header('Content-Type: text/plain; charset=utf-8');
 
 $dev = isset($_POST['device']) ? trim($_POST['device']) : '';
-if ($dev === '' || strpos($dev, '/dev/') !== 0) {
+if ($dev === '' || !tdm_is_safe_dev_path($dev)) {
     http_response_code(400);
-    echo "Device invalid";
+    echo "Invalid device";
     exit;
 }
 
-// scapăm argumentul pentru siguranță
-$dev = escapeshellarg($dev);
-$cmd = "sudo smartctl -x $dev 2>&1";
-passthru($cmd);
+$code = 0;
+$output = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-x", $dev), $code);
+if ($code !== 0)
+{
+    http_response_code(500);
+}
+
+echo $output;

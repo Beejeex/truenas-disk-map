@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 1 ] && [ "$1" = "list" ]; then
+    exec /usr/local/bin/sas3ircu list
+fi
+
+if [ "$#" -eq 2 ] && echo "$1" | grep -Eq '^[0-9]{1,3}$' && [ "$2" = "display" ]; then
+    if [ "$1" -gt 255 ]; then
+        echo "Invalid controller id." >&2
+        exit 64
+    fi
+    exec /usr/local/bin/sas3ircu "$1" display
+fi
+
+echo "Allowed sas3ircu read commands: list | <controller> display" >&2
+exit 64

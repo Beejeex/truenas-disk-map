@@ -1,10 +1,42 @@
 <?php
-$controllers = file("controllers.txt", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-@mkdir("hdd_controlere");
+require_once __DIR__ . "/hardware_helpers.php";
+
+$controllers_file = __DIR__ . "/controllers.txt";
+$controllers = array();
+if (is_file($controllers_file))
+{
+    $controllers = file($controllers_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+}
+
+$target_dir = __DIR__ . "/hdd_controlere";
+if (!is_dir($target_dir))
+{
+    @mkdir($target_dir, 0775, true);
+}
+
+if (empty($controllers))
+{
+    echo "[WARN] No controllers found in controllers.txt. HDD files were not generated.\n";
+    return;
+}
 
 foreach ($controllers as $ctl) 
 {
-    $output = shell_exec("sudo sas3ircu $ctl display");
+    $ctl = trim($ctl);
+    if (!preg_match('/^\d+$/', $ctl))
+    {
+        echo "[WARN] Ignoring invalid controller id: " . $ctl . "\n";
+        continue;
+    }
+
+    $code = 0;
+    $output = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-sas3ircu-read", $ctl, "display"), $code);
+    if ($code !== 0 || trim($output) === "")
+    {
+        echo "[WARN] sas3ircu display failed for controller " . $ctl . " (exit " . $code . ").\n";
+        continue;
+    }
+
     $lines = explode("\n", $output);
 
     $enclosure = "";
@@ -12,7 +44,12 @@ foreach ($controllers as $ctl)
     $serial = "";
     $is_hdd = false; // Flag pentru validare hard disk
 
-    $file = fopen("hdd_controlere/hdd_c_$ctl", "w");
+    $file = fopen($target_dir . "/hdd_c_$ctl", "w");
+    if ($file === false)
+    {
+        echo "[WARN] Could not open HDD output file for controller " . $ctl . ".\n";
+        continue;
+    }
 
     foreach ($lines as $line) 
     {
@@ -41,13 +78,8 @@ foreach ($controllers as $ctl)
             $serial = $m[1];
 
             // scriem doar daca este HDD
-            if ($is_hdd && isset($enclosure, $slot, $serial)) 
+            if ($is_hdd && $enclosure !== "" && $slot !== "" && $serial !== "")
             {
-                if ($ctl === "1" && is_numeric($slot)) 
-                {
-                    $slot = max(0, (int)$slot - 1);
-                }
-
                 fwrite($file, "$serial|$enclosure|$slot|$ctl\n");
 
                 // Resetam dupa scriere
@@ -60,5 +92,5 @@ foreach ($controllers as $ctl)
     }
     fclose($file);
 }
-echo "[OK] Fisiere HDD generate.";
+echo "[OK] HDD files generated.\n";
 ?>

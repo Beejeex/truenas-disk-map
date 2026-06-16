@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . "/hardware_helpers.php";
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
@@ -6,8 +8,18 @@ header("Content-Type: application/json");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['serial'], $_POST['actiune']))
 {
-    $serial = $_POST['serial'];
-    $actiune = $_POST['actiune']; // 'on' sau 'off'
+    $serial = trim($_POST['serial']);
+    $actiune = trim($_POST['actiune']); // 'on' or 'off'
+
+    if ($actiune !== 'on' && $actiune !== 'off')
+    {
+        http_response_code(400);
+        echo json_encode([
+            "status" => "error",
+            "mesaj" => "Invalid action. Expected 'on' or 'off'."
+        ]);
+        exit;
+    }
 
     $files = glob("hdd_controlere/*_ses");
 
@@ -15,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['serial'], $_POST['act
     {
         echo json_encode([
             "status" => "error",
-            "mesaj" => "Nu exista fisiere SES. Te rugam sa rulezi pasii pentru generare: Detectare controllere, generare fisiere HDD si SES."
+            "mesaj" => "No SES files exist. Run the generation steps: detect controllers, generate HDD files, associate devices, and generate SES files."
         ]);
         exit;
     }
@@ -29,11 +41,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['serial'], $_POST['act
             if ($s === $serial)
             {
                 $cmd = $actiune === 'on' ? $cmd_on : $cmd_off;
-                $output = shell_exec($cmd . " 2>&1");
+                $parsed = tdm_parse_sg_ses_command($cmd);
+                if ($parsed === null)
+                {
+                    http_response_code(400);
+                    echo json_encode([
+                        "status" => "error",
+                        "mesaj" => "No valid LED command exists for this slot.",
+                        "locatie" => $loc,
+                        "slot" => $slot,
+                        "device" => $dev
+                    ]);
+                    exit;
+                }
+
+                $code = 0;
+                $output = tdm_exec_sg_ses($parsed['ses_device'], $parsed['slot'], $parsed['action'], $code);
                 echo json_encode([
-                    "status" => "ok",
+                    "status" => $code === 0 ? "ok" : "error",
                     "executat" => $cmd,
                     "output" => $output,
+                    "exit_code" => $code,
                     "locatie" => $loc,
                     "slot" => $slot,
                     "device" => $dev
@@ -45,13 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['serial'], $_POST['act
 
     echo json_encode([
         "status" => "error",
-        "mesaj" => "Serialul '$serial' nu a fost gasit in fisierele SES."
+        "mesaj" => "Serial '$serial' was not found in the SES files."
     ]);
 }
 else
 {
     echo json_encode([
         "status" => "error",
-        "mesaj" => "Cerere invalida. Trebuie trimise campurile 'serial' si 'actiune'."
+        "mesaj" => "Invalid request. Fields 'serial' and 'actiune' are required."
     ]);
 }

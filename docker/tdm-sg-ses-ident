@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: tdm-sg-ses-ident <set|clear> <slot> /dev/sgN" >&2
+    exit 64
+fi
+
+action="$1"
+slot="$2"
+ses="$3"
+
+case "$action" in
+    set|clear) ;;
+    *)
+        echo "Invalid LED action." >&2
+        exit 64
+        ;;
+esac
+
+if ! echo "$slot" | grep -Eq '^[0-9]+$'; then
+    echo "Invalid slot index." >&2
+    exit 64
+fi
+
+if ! echo "$ses" | grep -Eq '^/dev/sg[0-9]+$'; then
+    echo "Invalid SES device." >&2
+    exit 64
+fi
+
+exec /usr/bin/sg_ses "--index=$slot" "--$action=ident" "$ses"

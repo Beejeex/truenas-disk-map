@@ -2,6 +2,38 @@ TrueNAS Disk Control (SES + SMART + Web UI)
 <img width="1192" height="1234" alt="pic_1" src="https://github.com/user-attachments/assets/607a14c7-0e7d-4a03-bfcd-5438f5824af2" />
 <img width="1165" height="683" alt="pic_2" src="https://github.com/user-attachments/assets/52bac8ad-613c-4169-a3ea-77141d515672" />
 
+## Fork notes
+
+This fork removes the old hard-coded SES model filters. Enclosures are now detected generically from:
+
+```
+lsscsi -g
+```
+
+Any `enclosu` row is considered, including Supermicro / LSI `SAS2X36` devices such as:
+
+```
+[1:0:24:0] enclosu LSI SAS2X36 0e12 - /dev/sg25
+```
+
+Generated diagnostics are written to:
+
+```
+hdd_controlere/discovery.txt
+hdd_controlere/discovery.json
+```
+
+The LED endpoints validate generated `sg_ses` commands server-side before execution. The Docker image also limits passwordless sudo to small validation wrappers instead of allowing raw hardware tools or every command.
+
+The `sas3ircu` dependency is still used for one read-only purpose: controller-to-slot disk inventory. The application calls only:
+
+```
+sas3ircu list
+sas3ircu <controller> display
+```
+
+Those calls are routed through `/usr/local/sbin/tdm-sas3ircu-read`, which rejects destructive `sas3ircu` subcommands such as delete, hotspare, offline/online, locate, boot changes, and log clearing. LEDs are controlled separately through `/usr/local/sbin/tdm-sg-ses-ident`, which allows only `sg_ses --set=ident` and `sg_ses --clear=ident`.
+
 
 This project is a small utility written mostly in procedural PHP (i do my best in it) that helps visualize and control disks in a TrueNAS system with SAS controllers and SES enclosures.
 
@@ -10,7 +42,7 @@ It was created because managing large disk arrays can be confusing, especially w
 
 The goal of this project is to provide a simple visual interface and automation pipeline that:
 
-•	detects SAS controllers and disks ( i'm using  LSI SAS3008 flashed IT Mode)
+•	detects SAS controllers and disks (originally tested with LSI SAS3008 flashed IT Mode)
 
 •	maps serial numbers ↔ Linux devices
 
@@ -54,7 +86,7 @@ The system runs a pipeline that collects data from multiple sources:
 2.	Read disk information using sas3ircu
 3.	Associate disk serial numbers
 4.	Collect SMART information using smartctl (for each disk)
-5.	Detect SES enclosures 
+5.	Detect SES enclosures generically from `lsscsi -g`
 6.	Build SES commands for LED control
 7.	Query TrueNAS API to determine:
     o	disks used by pools
@@ -110,9 +142,9 @@ This project assumes a system with:
 
 •	TrueNAS SCALE
 
-•	SAS controller (tested with LSI SAS3008)
+•	SAS controller supported by `sas3ircu` for controller-to-slot disk data
 
-•	SES compatible enclosures
+•	SES compatible enclosures visible as `enclosu` devices in `lsscsi -g`
 
 •	smartctl
 
@@ -123,6 +155,8 @@ This project assumes a system with:
 •	PHP (CLI + web)
 
 The script also uses the TrueNAS API for retrieving pool and disk information.
+
+Note: SES visibility alone is not enough to build the disk map. The app still needs controller disk data from `sas3ircu display` so it can map serial numbers to enclosure slots.
 
 Basically it's a docker container, see the instalation part.
 
@@ -203,12 +237,12 @@ Create a folder where the project will live.
 
 Example:
 
-mkdir -p /home/truenas_admin/dockere/truenas_interfata_noua
+mkdir -p /home/truenas_admin/dockere/truenas_interface
 
 
 Enter the folder:
 
-cd /home/truenas_admin/dockere/truenas_interfata_noua
+cd /home/truenas_admin/dockere/truenas_interface
 
 5. Upload the project files
    
@@ -227,20 +261,20 @@ You can use:
 
 7. Build the Docker image
 •	Inside the project directory run:
-sudo docker build -t truenas_interfata .
+sudo docker build -t truenas_interface .
 
 
 8. Run the container
 Run the container with hardware access:
 ```
 sudo docker run -d \
---name truenas_interfata \
+--name truenas_interface \
 --restart unless-stopped \
 -p 8585:80 \
 -v /dev:/dev \
 -v /etc/localtime:/etc/localtime:ro \
 --privileged \
-truenas_interfata
+truenas_interface
 ```
 
 7. Open the interface
@@ -260,19 +294,19 @@ If you want to modify the interface without rebuilding the container, you can mo
 Example:
 ```
 sudo docker run -d \
---name truenas_interfata \
+--name truenas_interface \
 --restart unless-stopped \
 -p 8585:80 \
 -v /dev:/dev \
 -v /etc/localtime:/etc/localtime:ro \
--v /home/truenas_admin/dockere/truenas_interfata_noua:/var/www/html \
+-v /home/truenas_admin/dockere/truenas_interface:/var/www/html \
 --privileged \
-truenas_interfata
+truenas_interface
 ```
 
 Now every modification you make in:
 ```
-  /home/truenas_admin/dockere/truenas_interfata_noua
+  /home/truenas_admin/dockere/truenas_interface
 ```
 will be instantly visible in the web interface without rebuilding the container.
 ________________________________________

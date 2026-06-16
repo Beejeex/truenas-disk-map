@@ -1,91 +1,11 @@
 <?php
-/*
-$output = shell_exec("lsblk -ndo NAME,TYPE | grep disk | awk '{print $1}'");
-$lines = explode("\n", trim($output));
-$data = "";
-
-foreach ($lines as $line) {
-    $dev = "/dev/" . trim($line);
-
-    $serial_raw = shell_exec("udevadm info --query=all --name=$dev | grep ID_SERIAL_SHORT= | cut -d= -f2");
-    $serial = $serial_raw ? trim($serial_raw) : "";
-
-    if (!$serial) {
-        // fallback cu smartctl
-        $serial_raw = shell_exec("sudo smartctl -i $dev | grep 'Serial Number' | awk -F: '{print $2}'");
-        $serial = $serial_raw ? trim($serial_raw) : "";
-    }
-
-    if ($serial)
-        $data .= "$serial $dev\n";
-}
-file_put_contents("serial_cache.txt", $data);
-echo "[OK] Serialele au fost asociate.";
-
-
-
-
-$output = shell_exec("lsblk -ndo NAME,TYPE | grep disk | awk '{print $1}'");
-$lines = explode("\n", trim($output));
-
-$data = "";
-
-foreach ($lines as $line)
-{
-    $line = trim($line);
-
-    if ($line)
-    {
-        $dev = "/dev/" . $line;
-        $serial = "";
-
-        // 1. Incercare udevadm
-        $serial_raw = shell_exec("udevadm info --query=all --name=$dev 2>/dev/null | grep ID_SERIAL_SHORT= | cut -d= -f2");
-
-        if ($serial_raw)
-        {
-            $serial = trim($serial_raw);
-        }
-
-        // 2. Daca nu exista, incercare smartctl standard
-        if ($serial == "")
-        {
-            $serial_raw = shell_exec("sudo smartctl -i $dev 2>/dev/null | grep 'Serial Number' | awk -F: '{print \$2}'");
-
-            if ($serial_raw)
-            {
-                $serial = trim($serial_raw);
-            }
-        }
-
-        // 3. Daca tot nu exista, incercare SAS
-        if ($serial == "")
-        {
-            $serial_raw = shell_exec("sudo smartctl -i -d scsi $dev 2>/dev/null | grep 'Serial number' | awk -F: '{print \$2}'");
-
-            if ($serial_raw)
-            {
-                $serial = trim($serial_raw);
-            }
-        }
-
-        if ($serial != "")
-        {
-            $data .= $serial . " " . $dev . "\n";
-        }
-    }
-}
-
-file_put_contents("serial_cache.txt", $data);
-
-echo "[OK] Serialele au fost asociate.";
-
-*/
+require_once __DIR__ . "/hardware_helpers.php";
 
 $data = "";
 
 // 1. Luam lista corecta de device-uri din smartctl
-$scan_output = shell_exec("sudo smartctl --scan 2>/dev/null");
+$scan_code = 0;
+$scan_output = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "--scan"), $scan_code);
 $lines = explode("\n", trim($scan_output));
 
 foreach ($lines as $line)
@@ -95,33 +15,42 @@ foreach ($lines as $line)
     if ($line != "")
     {
         // Extrage /dev/sdX
-        preg_match('/(\/dev\/[a-zA-Z0-9]+)/', $line, $dev_match);
+        preg_match('/(\/dev\/[A-Za-z0-9._-]+)/', $line, $dev_match);
 
         if (isset($dev_match[1]))
         {
             $dev = $dev_match[1];
+            if (!tdm_is_safe_dev_path($dev))
+            {
+                continue;
+            }
+
             $serial = "";
             $device_type = "";
 
             // Extrage -d TYPE daca exista
-            preg_match('/-d\s+([a-zA-Z0-9,]+)/', $line, $type_match);
+            preg_match('/-d\s+([A-Za-z0-9,+_-]+)/', $line, $type_match);
 
             if (isset($type_match[1]))
             {
                 $device_type = trim($type_match[1]);
+                if (!preg_match('/^[A-Za-z0-9,+_-]+$/', $device_type))
+                {
+                    $device_type = "";
+                }
             }
 
             // Construim comanda inteligent
             if ($device_type != "")
             {
-                $cmd = "sudo smartctl -i -d $device_type $dev 2>/dev/null";
+                $info_code = 0;
+                $info = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-i", "-d", $device_type, $dev), $info_code);
             }
             else
             {
-                $cmd = "sudo smartctl -i $dev 2>/dev/null";
+                $info_code = 0;
+                $info = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-i", $dev), $info_code);
             }
-
-            $info = shell_exec($cmd);
 
             if ($info)
             {
@@ -151,6 +80,6 @@ foreach ($lines as $line)
 
 file_put_contents("serial_cache.txt", $data);
 
-echo "[OK] Serialele au fost asociate eficient.";
+echo "[OK] Serials were associated with devices.";
 
 ?>

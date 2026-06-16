@@ -1,27 +1,5 @@
 <?php
 
-/*
-$dir = "hdd_controlere";
-$deleted = 0;
-
-if (is_dir($dir)) {
-    $files = glob("$dir/*");
-    foreach ($files as $file) {
-        if (is_file($file)) {
-            unlink($file);
-            $deleted++;
-        }
-    }
-    echo "[OK] Au fost sterse $deleted fisiere din $dir.";
-} else {
-    echo "[WARN] Directorul $dir nu exista.";
-}
-?>
-
-
-*/
-
-
 $dir = "hdd_controlere";
 $deleted = 0;
 $deleted_extra = 0;
@@ -49,11 +27,11 @@ if (is_dir($dir))
         }
     }
 
-    echo "[OK] Au fost sterse " . $deleted . " fisiere din " . $dir . ".\n";
+    echo "[OK] Deleted " . $deleted . " files from " . $dir . ".\n";
 }
 else
 {
-    echo "[WARN] Directorul " . $dir . " nu exista.\n";
+    echo "[WARN] Directory does not exist: " . $dir . "\n";
 }
 
 if (file_exists("serial_cache.txt"))
@@ -61,16 +39,16 @@ if (file_exists("serial_cache.txt"))
     if (unlink("serial_cache.txt"))
     {
         $deleted_extra++;
-        echo "[OK] A fost sters fisierul serial_cache.txt\n";
+        echo "[OK] Deleted serial_cache.txt\n";
     }
     else
     {
-        $errors[] = "Nu am putut sterge serial_cache.txt";
+        $errors[] = "Could not delete serial_cache.txt";
     }
 }
 else
 {
-    echo "[INFO] Fisierul serial_cache.txt nu exista\n";
+    echo "[INFO] serial_cache.txt does not exist\n";
 }
 
 if (file_exists("controllers.txt"))
@@ -78,23 +56,23 @@ if (file_exists("controllers.txt"))
     if (unlink("controllers.txt"))
     {
         $deleted_extra++;
-        echo "[OK] A fost sters fisierul controllers.txt\n";
+        echo "[OK] Deleted controllers.txt\n";
     }
     else
     {
-        $errors[] = "Nu am putut sterge controllers.txt";
+        $errors[] = "Could not delete controllers.txt";
     }
 }
 else
 {
-    echo "[INFO] Fisierul controllers.txt nu exista\n";
+    echo "[INFO] controllers.txt does not exist\n";
 }
 
-echo "[OK] Total fisiere extra sterse: " . $deleted_extra . "\n";
+echo "[OK] Extra files deleted: " . $deleted_extra . "\n";
 
 if (!empty($errors))
 {
-    echo "\n[WARN] Probleme la stergere:\n";
+    echo "\n[WARN] Delete problems:\n";
 
     foreach ($errors as $err)
     {

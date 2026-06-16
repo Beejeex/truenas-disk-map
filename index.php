@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/i18n.php";
+
 $app_version = "0.1.5";
 
 
@@ -184,9 +186,9 @@ foreach ($files as $file)
 
         // ===== CLASĂ DIN SMART (adăugat SPARE) =====
         $class = "smart-ok";
-		if (stripos($smart, "MORT") !== false || stripos($smart, "PERICULOS") !== false) {
+		if (stripos($smart, "DEAD") !== false || stripos($smart, "DANGEROUS") !== false || stripos($smart, "MORT") !== false || stripos($smart, "PERICULOS") !== false) {
 			$class = "smart-bad";
-		} elseif (stripos($smart, "SUSPECT") !== false || stripos($smart, "OBOSIT") !== false) {
+		} elseif (stripos($smart, "SUSPECT") !== false || stripos($smart, "TIRED") !== false || stripos($smart, "OBOSIT") !== false) {
 			$class = "smart-warn";
 		} elseif (stripos($smart, "SPARE") !== false) {
 			$class = "smart-spare";
@@ -220,11 +222,11 @@ foreach ($files as $file)
 }
 ?>
 <!DOCTYPE html>
-<html lang="ro">
+<html lang="<?php echo tdm_h('html.lang'); ?>">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Panouri NAS – Grile HDD dinamice</title>
+<title><?php echo tdm_h('page.title'); ?></title>
 
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 
@@ -411,21 +413,21 @@ foreach ($files as $file)
 <div class="d-flex align-items-center justify-content-between mb-2"
      style="background:#1f2330;border-radius:10px;padding:8px 12px; border:1px solid rgba(255,255,255,0.06)">
   <div class="text-light">
-    <strong>Ultima actualizare fișiere</strong>:
+    <strong><?php echo tdm_h('last_update.label'); ?></strong>:
     <span><?php echo htmlspecialchars($latest_dt); ?></span>
-    <span class="text-muted">(acum <?php echo htmlspecialchars($age_text); ?>)</span>
-    <span class="text-muted ml-2">| <?php echo (int)$files_count; ?> fișiere analizate</span>
+    <span class="text-muted">(<?php echo tdm_h('last_update.ago', array('age' => $age_text)); ?>)</span>
+    <span class="text-muted ml-2">| <?php echo tdm_h('last_update.files', array('count' => (int)$files_count)); ?></span>
   </div>
   <div>
     <?php if ($is_stale): ?>
-      <span style="color:#ff5858; font-weight:700;">Atenție: informațiile au peste 24h!</span>
+      <span style="color:#ff5858; font-weight:700;"><?php echo tdm_h('last_update.stale'); ?></span>
     <?php else: ?>
-      <span class="text-success">OK</span>
+      <span class="text-success"><?php echo tdm_h('status.ok'); ?></span>
     <?php endif; ?>
   </div>
-  
+
     <button id="btnRegen" type="button" class="btn btn-sm btn-outline-info ml-3">
-    Reactualizeaza (dureaza cateva min)
+    <?php echo tdm_h('refresh.button'); ?>
   </button>
   
 </div>
@@ -433,27 +435,27 @@ foreach ($files as $file)
 
 <div class="d-flex align-items-center justify-content-between mb-3"
      style="background:#232730;border-radius:10px;padding:10px 12px">
-  <div class="text-light font-weight-bold">Opțiuni afișare</div>
+  <div class="text-light font-weight-bold"><?php echo tdm_h('display.options'); ?></div>
 
   <div class="d-flex align-items-center">
     <div class="mr-3 text-light">
       <label class="mb-0" style="cursor:pointer">
         <input type="checkbox" id="toggleShort" checked>
-        <span class="ml-2">Hide full pool names</span>
+        <span class="ml-2"><?php echo tdm_h('display.hide_full_pool_names'); ?></span>
       </label>
     </div>
 
     <div class="input-group" style="width:340px">
       <input id="diskSearch" type="text" class="form-control form-control-sm"
-             placeholder="caută: serial sau sdX (ex: sdap NAG2TTVX)">
+             placeholder="<?php echo tdm_h('search.placeholder'); ?>">
       <div class="input-group-append">
-        <button id="btnClearSearch" class="btn btn-sm btn-outline-light" type="button">Clear</button>
+        <button id="btnClearSearch" class="btn btn-sm btn-outline-light" type="button"><?php echo tdm_h('button.clear'); ?></button>
       </div>
     </div>
 	
 <div class="ml-3 d-flex">
   <select id="poolFilter" class="custom-select custom-select-sm" style="width: 200px;">
-    <option value="">— Neselectat —</option>
+    <option value=""><?php echo tdm_h('select.unselected'); ?></option>
     <?php foreach ($pool_options as $pn): ?>
       <option value="<?php echo htmlspecialchars($pn); ?>">
         <?php echo htmlspecialchars($pn); ?>
@@ -461,7 +463,7 @@ foreach ($files as $file)
     <?php endforeach; ?>
   </select>
   <div class="input-group-append ml-2">
-    <button id="btnClearPool" class="btn btn-sm btn-outline-light" type="button">Reset</button>
+    <button id="btnClearPool" class="btn btn-sm btn-outline-light" type="button"><?php echo tdm_h('button.reset'); ?></button>
   </div>
 </div>
 
@@ -546,14 +548,18 @@ foreach ($files as $file)
         <h5 class="nas-title mb-0"><?php echo htmlspecialchars($panel['title']); ?></h5>
         <div class="text-right">
           <div class="file-pill d-inline-block mr-2">
-            <?php echo "Fisier info : " . htmlspecialchars($panel['file']); ?>
+            <?php echo tdm_h('panel.file_info', array('file' => $panel['file'])); ?>
           </div>
 
           <?php
           // Dacă vrei să afișezi info de grid, folosește IF clasic:
           if ($rows >= 1) {
               echo '<small class="text-muted">';
-              echo 'Grid: ' . $cols . ' col × ' . $rows . ' rânduri · Ordine top: ' . htmlspecialchars($ordHint);
+              echo tdm_h('panel.grid_info', array(
+                  'cols' => $cols,
+                  'rows' => $rows,
+                  'order' => $ordHint
+              ));
               echo '</small>';
           }
           ?>
@@ -706,87 +712,86 @@ foreach ($files as $file)
 
 
 <div class="nas-panel mt-4">
-  <h5 class="nas-title mb-3">Legendă LED-uri</h5>
+  <h5 class="nas-title mb-3"><?php echo tdm_h('legend.title'); ?></h5>
   <div class="legend-grid">
     <div class="legend-item">
       <span class="led-dot-legend smart-ok"></span>
-      <span>Disk OK (verde) – calcul intern indica stare buna</span>
+      <span><?php echo tdm_h('legend.ok'); ?></span>
     </div>
     <div class="legend-item">
       <span class="led-dot-legend smart-warn"></span>
-      <span>Disk suspect/obosit (galben) – posibile probleme</span>
+      <span><?php echo tdm_h('legend.warn'); ?></span>
     </div>
-	
+
 	<div class="legend-item">
 	  <span class="led-dot-legend smart-bad"></span>
-	  <span>Disk MORT (roșu) – SMART FAILED / self-test fail / probleme critice</span>
+	  <span><?php echo tdm_h('legend.dead'); ?></span>
 	</div>
 	<div class="legend-item">
 	  <span class="led-dot-legend smart-bad"></span>
-	  <span>Disk PERICULOS / problematic (roșu) – erori/sectoare problematice detectate posibil sa functieneze in truenas dar cu erori detectate (de scriptul local)</span>
+	  <span><?php echo tdm_h('legend.danger'); ?></span>
 	</div>
 
     <div class="legend-item">
       <span class="led-dot-legend smart-spare"></span>
-      <span>Disk marcat ca SPARE (alb) – asociat pool-ului dar rezerva</span>
+      <span><?php echo tdm_h('legend.spare'); ?></span>
     </div>
     <div class="legend-item">
       <span class="led-dot-legend empty"></span>
-      <span>Slot gol (negru)</span>
+      <span><?php echo tdm_h('legend.empty'); ?></span>
     </div>
     <div class="legend-item">
       <span class="led-dot-legend smart-unused"></span>
-      <span>Disk nefolosit (albastru deschis) – prezent dar neasociat</span>
+      <span><?php echo tdm_h('legend.unused'); ?></span>
     </div>
   </div>
 </div>
 
 
 <div class="nas-panel mt-3">
-  <h5 class="nas-title mb-3">Criterii evaluare SMART</h5>
+  <h5 class="nas-title mb-3"><?php echo tdm_h('smart.criteria.title'); ?></h5>
 
   <ul class="mb-2 pl-3">
-  
+
 	<li class="mb-2">
-	  <strong class="text-danger">MORT</strong> – dacă oricare este adevărat:
+	  <strong class="text-danger"><?php echo tdm_h('smart.criteria.dead'); ?></strong>
 	  <ul class="mt-1">
-		<li>SMART Overall = <code>FAILED</code> (test global picat)</li>
-		<li>Self-test <code>FAILED</code> (read/long/short fail)</li>
-		<li><code>Current_Pending_Sector</code> (ID 197) &gt; 0 <em>și</em> <code>Offline_Uncorrectable</code> (ID 198) &gt; 0</li>
-		<li><code>Reallocated_Sector_Ct</code> (ID 5) ≥ 100</li>
+		<li><?php echo tdm_h('smart.criteria.failed_overall'); ?></li>
+		<li><?php echo tdm_h('smart.criteria.failed_selftest'); ?></li>
+		<li><?php echo tdm_h('smart.criteria.pending_uncorrectable'); ?></li>
+		<li><?php echo tdm_h('smart.criteria.reallocated_critical'); ?></li>
 	  </ul>
 	</li>
     <li class="mb-2">
-      <strong class="text-danger">PERICULOS</strong> – dacă oricare este adevărat:
+      <strong class="text-danger"><?php echo tdm_h('smart.criteria.danger'); ?></strong>
       <ul class="mt-1">
-        <li><code>Current_Pending_Sector</code> (ID 197) &gt; 0</li>
-        <li><code>Offline_Uncorrectable</code> (ID 198) &gt; 0</li>
-        <li><code>Reallocated_Sector_Ct</code> (ID 5) &gt; 10</li>
-        <li><code>ATA_Errors</code> &gt; 0</li>
+        <li><?php echo tdm_h('smart.criteria.pending'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.uncorrectable'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.reallocated_danger'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
       </ul>
     </li>
 
     <li class="mb-2">
-      <strong class="text-warning">OBOSIT</strong> – dacă oricare este adevărat:
+      <strong class="text-warning"><?php echo tdm_h('smart.criteria.tired'); ?></strong>
       <ul class="mt-1">
-        <li><code>Load_Cycle_Count</code> (ID 193) &gt; 20.000</li>
-        <li><code>Reallocated_Sector_Ct</code> (ID 5) între 1 și 10</li>
+        <li><?php echo tdm_h('smart.criteria.load_cycle'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.reallocated_tired'); ?></li>
       </ul>
     </li>
 
     <li class="mb-2">
-      <strong class="text-info">SUSPECT</strong> – dacă oricare este adevărat:
+      <strong class="text-info"><?php echo tdm_h('smart.criteria.suspect'); ?></strong>
       <ul class="mt-1">
-        <li><code>ReadFail</code> (eșec la citire) = DA</li>
-        <li><code>Reallocated_Sector_Ct</code> (ID 5) &gt; 0</li>
-        <li><code>ATA_Errors</code> &gt; 0</li>
+        <li><?php echo tdm_h('smart.criteria.read_fail'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
       </ul>
     </li>
   </ul>
 
 	 <small class="text-muted d-block">
-	  Notă: evaluarea se face în această ordine: <em>MORT → PERICULOS → OBOSIT → SUSPECT → OK</em>.
-	  Dacă un disc îndeplinește mai multe condiții, se afișează cel mai sever status care se potrivește primul.
+	  <?php echo tdm_h('smart.criteria.note'); ?>
 	</small>
 
 </div>
@@ -807,54 +812,54 @@ foreach ($files as $file)
     <div class="modal-content" style="background:#232730;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
       <div class="modal-header">
         <div>
-          <h5 class="modal-title" id="driveModalLabel">Detalii bay</h5>
+          <h5 class="modal-title" id="driveModalLabel"><?php echo tdm_h('modal.bay_details'); ?></h5>
           <!-- toastul de confirmare copy -->
           <div id="copyHint" class="small" style="display:none;color:#79d2ff;">
-            Valoare copiată: <code class="val"></code>
+            <?php echo tdm_h('modal.copied_value'); ?> <code class="val"></code>
           </div>
         </div>
-        <button type="button" class="close text-light" data-dismiss="modal" aria-label="Închide">
+        <button type="button" class="close text-light" data-dismiss="modal" aria-label="<?php echo tdm_h('modal.close'); ?>">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
 
       <div class="modal-body">
-    <div><strong>Slot:</strong> <span id="mSlot" class="copyable" title="Dublu-click pentru copiere"></span></div>
+    <div><strong><?php echo tdm_h('modal.slot'); ?></strong> <span id="mSlot" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span></div>
 
 <!-- Nume: împărțit pe device/serial + wrapper pentru „full” -->
 <div>
-  <strong>Nume:</strong>
-  <span id="mNameFull" class="copyable" title="Dublu-click pentru copiere întregul">
+  <strong><?php echo tdm_h('modal.name'); ?></strong>
+  <span id="mNameFull" class="copyable" title="<?php echo tdm_h('modal.copy_whole'); ?>">
     <span id="mNameDev"
           class="copyable"
           data-copy="dev"
-          title="Dublu-click pentru copiere device (fără /dev/)"></span>
+          title="<?php echo tdm_h('modal.copy_device'); ?>"></span>
     <span id="mNameBrL" class="text-muted" style="display:none">[ </span>
     <span id="mNameSerial"
           class="copyable"
           data-copy="serial"
           style="display:none"
-          title="Dublu-click pentru copiere serial"></span>
+          title="<?php echo tdm_h('modal.copy_serial'); ?>"></span>
     <span id="mNameBrR" class="text-muted" style="display:none"> ]</span>
   </span>
 </div>
 
-<div><strong>Locatie Disk:</strong> <span id="mLocatieDisk" class="copyable" title="Dublu-click pentru copiere">—</span></div>
-<div><strong>Stare:</strong> <span id="mSmart" class="copyable" title="Dublu-click pentru copiere"></span></div>
-<div><strong>Pool:</strong> <span id="mPool" class="copyable" title="Dublu-click pentru copiere">—</span></div>
+<div><strong><?php echo tdm_h('modal.disk_location'); ?></strong> <span id="mLocatieDisk" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span></div>
+<div><strong><?php echo tdm_h('modal.state'); ?></strong> <span id="mSmart" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span></div>
+<div><strong><?php echo tdm_h('modal.pool'); ?></strong> <span id="mPool" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span></div>
 
       </div>
 
 <div class="modal-footer d-flex justify-content-between">
   <div>
     <button id="btnSmart" type="button" class="btn btn-info btn-sm">
-      Interpretează SMART-ul
+      <?php echo tdm_h('button.smart'); ?>
     </button>
   </div>
   <div>
-    <button id="btnOn"  type="button" class="btn btn-success btn-sm" onclick="runLed(this.dataset.cmd)">Aprinde</button>
-    <button id="btnOff" type="button" class="btn btn-danger  btn-sm" onclick="runLed(this.dataset.cmd)">Stinge</button>
-    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Închide</button>
+    <button id="btnOn"  type="button" class="btn btn-success btn-sm" onclick="runLed(this.dataset.cmd)"><?php echo tdm_h('button.led_on'); ?></button>
+    <button id="btnOff" type="button" class="btn btn-danger  btn-sm" onclick="runLed(this.dataset.cmd)"><?php echo tdm_h('button.led_off'); ?></button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal"><?php echo tdm_h('modal.close'); ?></button>
   </div>
 </div>
 
@@ -870,15 +875,15 @@ foreach ($files as $file)
   <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
     <div class="modal-content" style="background:#1f2330;color:#e6e6e6;">
       <div class="modal-header">
-        <h5 class="modal-title">Output SMART</h5>
-        <button type="button" class="close text-light" data-dismiss="modal" aria-label="Închide">
+        <h5 class="modal-title"><?php echo tdm_h('smart.output.title'); ?></h5>
+        <button type="button" class="close text-light" data-dismiss="modal" aria-label="<?php echo tdm_h('modal.close'); ?>">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
       <div class="modal-body">
         <pre id="smartOutput" style="background:#0f121a;color:#cfe4ff;border-radius:6px;
           border:1px solid rgba(255,255,255,.08);padding:12px;max-height:70vh;overflow:auto;">
-          (încarcă...)
+          <?php echo tdm_h('smart.output.loading'); ?>
         </pre>
       </div>
     </div>
@@ -895,8 +900,8 @@ foreach ($files as $file)
   <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
     <div class="modal-content" style="background:#1f2330;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
       <div class="modal-header">
-        <h5 class="modal-title">Reactualizare fișiere SES</h5>
-        <button id="regenCloseX" type="button" class="close text-light" data-dismiss="modal" aria-label="Închide">
+        <h5 class="modal-title"><?php echo tdm_h('refresh.title'); ?></h5>
+        <button id="regenCloseX" type="button" class="close text-light" data-dismiss="modal" aria-label="<?php echo tdm_h('modal.close'); ?>">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -908,7 +913,7 @@ foreach ($files as $file)
              style="position:absolute; inset:0; z-index:10; background:rgba(20,22,28,.6);">
           <div class="text-center text-light">
             <div class="spinner-border text-info" role="status"></div>
-            <div class="mt-2">Rulează… poate dura câteva minute</div>
+            <div class="mt-2"><?php echo tdm_h('refresh.running'); ?></div>
           </div>
         </div>
 
@@ -919,8 +924,8 @@ foreach ($files as $file)
       </div>
 
       <div class="modal-footer">
-        <button id="regenReload" type="button" class="btn btn-success btn-sm">Reîncarcă</button>
-        <button id="regenClose"  type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Închide</button>
+        <button id="regenReload" type="button" class="btn btn-success btn-sm"><?php echo tdm_h('button.reload'); ?></button>
+        <button id="regenClose"  type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal"><?php echo tdm_h('modal.close'); ?></button>
       </div>
     </div>
   </div>
@@ -935,6 +940,28 @@ foreach ($files as $file)
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" crossorigin="anonymous"></script>
 
 <script>
+var TDM_I18N = <?php echo json_encode(array(
+  'js.device_unknown' => tdm_t('js.device_unknown'),
+  'js.smart_running' => tdm_t('js.smart_running'),
+  'js.no_output' => tdm_t('js.no_output'),
+  'js.error' => tdm_t('js.error'),
+  'js.no_led_command' => tdm_t('js.no_led_command'),
+  'js.executed' => tdm_t('js.executed'),
+  'js.http_error' => tdm_t('js.http_error'),
+  'js.refresh_error' => tdm_t('js.refresh_error'),
+  'js.completed' => tdm_t('js.completed'),
+  'smart.output.title' => tdm_t('smart.output.title')
+), JSON_UNESCAPED_SLASHES); ?>;
+
+function tdmMsg(key, vars) {
+  var text = TDM_I18N[key] || key;
+  vars = vars || {};
+  Object.keys(vars).forEach(function(name){
+    text = text.replace('{' + name + '}', vars[name]);
+  });
+  return text;
+}
+
 function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare) {
   var nameWithSerial = name || 'Empty';
   if (serial) nameWithSerial += ' [ ' + serial + ' ]';
@@ -983,7 +1010,7 @@ function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolN
 
   // 🔹 3) (opțional) setăm un titlu util în modalul SMART
   var smartTitle = document.querySelector('#smartModal .modal-title');
-  if (smartTitle) smartTitle.textContent = 'Output SMART — ' + (devForSmart || '?');
+  if (smartTitle) smartTitle.textContent = tdmMsg('smart.output.title') + ' - ' + (devForSmart || '?');
 
   $('#driveModal').modal('show');
 }
@@ -993,14 +1020,14 @@ function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolN
 $(function(){
   $('#btnSmart').on('click', function(){
     var dev = this.dataset.device || '';
-    if (!dev) { alert('Device necunoscut!'); return; }
+    if (!dev) { alert(tdmMsg('js.device_unknown')); return; }
 
-    $('#smartOutput').text('Se rulează smartctl -x ' + dev + ' ...');
+    $('#smartOutput').text(tdmMsg('js.smart_running', {device: dev}));
     $('#smartModal').modal('show');
 
     $.post('smart_run.php', { device: dev })
-      .done(function(resp){ $('#smartOutput').text(resp || '(fără output)'); })
-      .fail(function(xhr){ $('#smartOutput').text('Eroare: ' + (xhr.responseText || xhr.status)); });
+      .done(function(resp){ $('#smartOutput').text(resp || tdmMsg('js.no_output')); })
+      .fail(function(xhr){ $('#smartOutput').text(tdmMsg('js.error', {message: (xhr.responseText || xhr.status)})); });
   });
 });
 </script>
@@ -1008,7 +1035,7 @@ $(function(){
 
 <script>
   function controlLed(cmd) {
-    if (!cmd) { alert('Nu există comandă pentru acest slot.'); return; }
+    if (!cmd) { alert(tdmMsg('js.no_led_command')); return; }
 
     // ia butoanele DIN NOU în acest scope
     var btnOn  = document.getElementById('btnOn');
@@ -1016,8 +1043,8 @@ $(function(){
     [btnOn, btnOff].forEach(b => b && (b.disabled = true));
 
     $.post('led_control.php', { cmd: cmd })
-      .done(function(resp){ alert(resp || ('Executat: ' + cmd)); })
-      .fail(function(xhr){ alert('Eroare HTTP ' + xhr.status + ':\n' + (xhr.responseText||'')); })
+      .done(function(resp){ alert(resp || tdmMsg('js.executed', {cmd: cmd})); })
+      .fail(function(xhr){ alert(tdmMsg('js.http_error', {status: xhr.status}) + '\n' + (xhr.responseText||'')); })
       .always(function(){
         [btnOn, btnOff].forEach(b => b && (b.disabled = false));
       });
@@ -1138,16 +1165,16 @@ $(function(){
       timeout: 0
     })
     .done(function(resp){
-      $out.text(resp || '(fără output)');
+      $out.text(resp || tdmMsg('js.no_output'));
 
       // dacă a apărut marker-ul, ascundem imediat overlay-ul
-      if (/\=\=\=\s*COMPLET\s*\=\=\=/.test(resp || '')) {
-        $out.append("\n✔ Finalizat cu succes");
+      if (/\=\=\=\s*(COMPLET|COMPLETE)\s*\=\=\=/.test(resp || '')) {
+        $out.append("\n" + tdmMsg('js.completed'));
         hideSpinnerEnableButtons();               // << AICI
       }
     })
     .fail(function(xhr, status, err){
-      $out.text('Eroare la executare (' + status + '):\n' + (xhr.responseText || err || ''));
+      $out.text(tdmMsg('js.refresh_error', {status: status}) + '\n' + (xhr.responseText || err || ''));
       hideSpinnerEnableButtons();                 // arată butoanele la eroare
     })
     .always(function(){

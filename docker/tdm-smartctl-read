@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+is_dev_path() {
+    echo "$1" | grep -Eq '^/dev/[A-Za-z0-9._-]+$'
+}
+
+is_device_type() {
+    echo "$1" | grep -Eq '^[A-Za-z0-9,+_-]+$'
+}
+
+if [ "$#" -eq 1 ] && [ "$1" = "--scan" ]; then
+    exec /usr/sbin/smartctl --scan
+fi
+
+if [ "$#" -eq 2 ] && [ "$1" = "-i" ] && is_dev_path "$2"; then
+    exec /usr/sbin/smartctl -i "$2"
+fi
+
+if [ "$#" -eq 4 ] && [ "$1" = "-i" ] && [ "$2" = "-d" ] && is_device_type "$3" && is_dev_path "$4"; then
+    exec /usr/sbin/smartctl -i -d "$3" "$4"
+fi
+
+if [ "$#" -eq 2 ] && [ "$1" = "-x" ] && is_dev_path "$2"; then
+    exec /usr/sbin/smartctl -x "$2"
+fi
+
+echo "Allowed smartctl read commands: --scan | -i <dev> | -i -d <type> <dev> | -x <dev>" >&2
+exit 64
