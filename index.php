@@ -2,7 +2,7 @@
 
 require_once __DIR__ . "/i18n.php";
 
-$app_version = "0.1.5";
+$app_version = "0.1.6";
 
 
 
@@ -37,7 +37,44 @@ function tdm_ses_meta_from_parts(array $parts)
         'crc_errors' => isset($parts[15]) ? (int)$parts[15] : 0,
         'ata_errors' => isset($parts[16]) ? (int)$parts[16] : 0,
         'load_cycle_count' => isset($parts[17]) ? (int)$parts[17] : 0,
+        'reported_uncorrectable' => isset($parts[18]) ? (int)$parts[18] : 0,
+        'end_to_end_errors' => isset($parts[19]) ? (int)$parts[19] : 0,
+        'reallocation_events' => isset($parts[20]) ? (int)$parts[20] : 0,
+        'spin_retry_count' => isset($parts[21]) ? (int)$parts[21] : 0,
+        'calibration_retry_count' => isset($parts[22]) ? (int)$parts[22] : 0,
+        'command_timeout' => isset($parts[23]) ? (int)$parts[23] : 0,
+        'high_fly_writes' => isset($parts[24]) ? (int)$parts[24] : 0,
     );
+}
+
+function tdm_status_name($smart)
+{
+    $smart = trim((string)$smart);
+    if ($smart === '' || strtoupper($smart) === 'X') return 'UNKNOWN';
+    if (preg_match('/^([A-Z_]+)/', strtoupper($smart), $m))
+    {
+        return $m[1];
+    }
+    return 'UNKNOWN';
+}
+
+function tdm_status_slug($status)
+{
+    $slug = strtolower(str_replace('_', '-', (string)$status));
+    $slug = preg_replace('/[^a-z0-9-]+/', '', $slug);
+    return $slug !== '' ? $slug : 'unknown';
+}
+
+function tdm_status_class($smart)
+{
+    $status = tdm_status_name($smart);
+    if ($status === 'DEAD' || $status === 'CRITICAL') return 'smart-bad';
+    if ($status === 'DANGEROUS') return 'smart-danger';
+    if ($status === 'SUSPECT') return 'smart-warn';
+    if ($status === 'INTERFACE') return 'smart-interface';
+    if ($status === 'MAINTENANCE') return 'smart-maintenance';
+    if ($status === 'UNKNOWN') return 'smart-unknown';
+    return 'smart-ok';
 }
 
 function tdm_hours_label($hours)
@@ -53,6 +90,7 @@ function tdm_disk_meta_summary(array $meta)
     if ($meta['model'] !== '') $bits[] = $meta['model'];
     if ($meta['capacity'] !== '') $bits[] = $meta['capacity'];
     if ((int)$meta['power_hours'] > 0) $bits[] = tdm_hours_label($meta['power_hours']);
+    if ($meta['temperature_c'] !== '') $bits[] = (int)$meta['temperature_c'] . 'C';
     return implode(' | ', $bits);
 }
 
@@ -64,6 +102,9 @@ function tdm_disk_counter_summary(array $meta)
         'U=' . (int)$meta['uncorrectable'],
         'CRC=' . (int)$meta['crc_errors'],
         'ATA=' . (int)$meta['ata_errors'],
+        'R187=' . (int)$meta['reported_uncorrectable'],
+        'E2E=' . (int)$meta['end_to_end_errors'],
+        'Ev=' . (int)$meta['reallocation_events'],
     );
 
     if ((int)$meta['load_cycle_count'] > 0)
@@ -75,6 +116,11 @@ function tdm_disk_counter_summary(array $meta)
     {
         $bits[] = 'Temp=' . (int)$meta['temperature_c'] . 'C';
     }
+
+    if ((int)$meta['spin_retry_count'] > 0) $bits[] = 'Spin=' . (int)$meta['spin_retry_count'];
+    if ((int)$meta['calibration_retry_count'] > 0) $bits[] = 'Cal=' . (int)$meta['calibration_retry_count'];
+    if ((int)$meta['command_timeout'] > 0) $bits[] = 'Cmd=' . (int)$meta['command_timeout'];
+    if ((int)$meta['high_fly_writes'] > 0) $bits[] = 'Fly=' . (int)$meta['high_fly_writes'];
 
     return implode(' / ', $bits);
 }
@@ -213,7 +259,7 @@ if (is_file($pool_file)) {
 
 // ... după ce ai populat $unused_by_disk ...
 if (!empty($unused_by_disk)) {
-    $pool_names['NEFOLOSIT'] = true;
+    $pool_names['UNUSED'] = true;
 }
 
 $pool_options = array_keys($pool_names);
@@ -248,14 +294,10 @@ foreach ($files as $file)
         if ($title === null) $title = trim($locatie);
 
         // ===== CLASĂ DIN SMART (adăugat SPARE) =====
-        $class = "smart-ok";
-        if (stripos($smart, "DEAD") !== false || stripos($smart, "DANGEROUS") !== false || stripos($smart, "MORT") !== false || stripos($smart, "PERICULOS") !== false) {
-			$class = "smart-bad";
-		} elseif (stripos($smart, "SUSPECT") !== false || stripos($smart, "WARNING") !== false || stripos($smart, "UNKNOWN") !== false || trim($smart) === "X" || stripos($smart, "TIRED") !== false || stripos($smart, "OBOSIT") !== false) {
-			$class = "smart-warn";
-		} elseif (stripos($smart, "SPARE") !== false) {
-			$class = "smart-spare";
-		}
+        $class = tdm_status_class($smart);
+        if (stripos($smart, "SPARE") !== false) {
+            $class = "smart-spare";
+        }
 
 
         $pozitia = (int)$slot + 1; // 1-based
@@ -319,9 +361,14 @@ foreach ($files as $file)
 }
 
 /* Culori identice cu cele din grid */
-.led-dot-legend.smart-ok    { background:#2bff6a; box-shadow:0 0 8px rgba(43,255,106,.8); }
-.led-dot-legend.smart-warn  { background:#ffd24a; box-shadow:0 0 8px rgba(255,210,74,.8); }
-.led-dot-legend.smart-bad   { background:#ff4a4a; box-shadow:0 0 8px rgba(255,74,74,.85); }
+.led-dot-legend.smart-ok    { background:var(--status-ok); box-shadow:0 0 8px rgba(34,197,94,.8); }
+.led-dot-legend.smart-dead  { background:var(--status-dead); box-shadow:0 0 8px rgba(153,27,27,.85); }
+.led-dot-legend.smart-critical { background:var(--status-critical); box-shadow:0 0 8px rgba(239,68,68,.85); }
+.led-dot-legend.smart-warn  { background:var(--status-suspect); box-shadow:0 0 8px rgba(234,179,8,.8); }
+.led-dot-legend.smart-danger{ background:var(--status-dangerous); box-shadow:0 0 8px rgba(249,115,22,.85); }
+.led-dot-legend.smart-interface{ background:var(--status-interface); box-shadow:0 0 8px rgba(168,85,247,.85); }
+.led-dot-legend.smart-maintenance{ background:var(--status-maintenance); box-shadow:0 0 8px rgba(34,211,238,.8); }
+.led-dot-legend.smart-unknown{ background:var(--status-unknown); box-shadow:0 0 8px rgba(148,163,184,.75); }
 .led-dot-legend.smart-spare { background:#e9ecef; box-shadow:0 0 6px rgba(233,236,239,.6); }
 .led-dot-legend.empty       { background:#111;    box-shadow:inset 0 0 3px rgba(255,255,255,.2); }
 .led-dot-legend.smart-unused{ background:#2da8ff; box-shadow:0 0 10px rgba(45,168,255,.9); }
@@ -378,6 +425,15 @@ foreach ($files as $file)
   --pill-text: #cbd3da;
   --pre-bg: #0f121a;
   --pre-text: #cfe4ff;
+  --status-dead: #991b1b;
+  --status-critical: #ef4444;
+  --status-dangerous: #f97316;
+  --status-suspect: #eab308;
+  --status-interface: #a855f7;
+  --status-maintenance: #22d3ee;
+  --status-unknown: #94a3b8;
+  --status-ok: #22c55e;
+  --status-info: #64748b;
 }
 
 html.theme-light{
@@ -398,8 +454,31 @@ html.theme-light{
 
   body { background: var(--bg); color: var(--text); }
   .page-wrap { min-height: 100vh; padding: 24px 0 48px 0; }
+  .app-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:14px;
+  }
+  .app-title{
+    margin:0;
+    color:var(--title);
+    font-size:28px;
+    font-weight:800;
+    line-height:1.15;
+  }
+  .app-version{
+    padding:5px 9px;
+    border-radius:6px;
+    background:var(--pill-bg);
+    color:var(--pill-text);
+    font-size:12px;
+    font-weight:700;
+    white-space:nowrap;
+  }
   .nas-panel {
-    background: var(--panel); border-radius: 14px;
+    background: var(--panel); border-radius: 8px;
     box-shadow: 0 12px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.03);
     padding: 18px; margin-bottom: 26px;
   }
@@ -408,6 +487,37 @@ html.theme-light{
   .top-status-bar, .display-options-bar{
     background: var(--panel-2) !important;
     border-color: var(--border) !important;
+    border-radius:8px !important;
+    box-shadow:inset 0 0 0 1px var(--border);
+  }
+  .top-status-bar{
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .top-status-meta{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+    min-width:240px;
+  }
+  .top-status-actions{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .display-options-bar{
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .display-options-controls{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    gap:10px;
   }
 
   /* Grid: fără înălțime fixă – tile-ul decide dimensiunea */
@@ -442,6 +552,10 @@ html.theme-light{
 */
 .hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK.png'); }
 .hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
+.hdd-tile.smart-danger .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
+.hdd-tile.smart-interface .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
+.hdd-tile.smart-maintenance .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
+.hdd-tile.smart-unknown .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
 .hdd-tile.smart-bad   .hdd-content{ background-image:url('src/img/HDD_ISSUE_PROBLEMS.png'); }
 .hdd-tile.smart-spare .hdd-content{ background-image:url('src/img/HDD_SPARE.png'); }
 .hdd-tile.empty       .hdd-content{ background-image:url('src/img/HDD_SLOT_EMPTY.png'); }
@@ -451,6 +565,10 @@ html.theme-light{
 /* C_1 (portret) – folosim imaginile NOI, deja ROTITE */
 .panel-c1 .hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK_rotated.png'); }
 .panel-c1 .hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
+.panel-c1 .hdd-tile.smart-danger .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
+.panel-c1 .hdd-tile.smart-interface .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
+.panel-c1 .hdd-tile.smart-maintenance .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
+.panel-c1 .hdd-tile.smart-unknown .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
 .panel-c1 .hdd-tile.smart-bad   .hdd-content{ background-image:url('src/img/HDD_ISSUE_PROBLEMS_rotated.png'); }
 .panel-c1 .hdd-tile.smart-spare .hdd-content{ background-image:url('src/img/HDD_SPARE_rotated.png'); }
 .panel-c1 .hdd-tile.empty       .hdd-content{ background-image:url('src/img/HDD_SLOT_EMPTY_rotated.png'); }
@@ -498,10 +616,40 @@ html.theme-light{
 }
 .hdd-tile.smart-ok   .led-dot{ background:#2bff6a; box-shadow:0 0 8px rgba(43,255,106,.8); }
 .hdd-tile.smart-warn .led-dot{ background:#ffd24a; box-shadow:0 0 8px rgba(255,210,74,.8); }
+.hdd-tile.smart-danger .led-dot{ background:var(--status-dangerous); box-shadow:0 0 8px rgba(249,115,22,.85); }
+.hdd-tile.smart-interface .led-dot{ background:var(--status-interface); box-shadow:0 0 8px rgba(168,85,247,.85); }
+.hdd-tile.smart-maintenance .led-dot{ background:var(--status-maintenance); box-shadow:0 0 8px rgba(34,211,238,.8); }
+.hdd-tile.smart-unknown .led-dot{ background:var(--status-unknown); box-shadow:0 0 8px rgba(148,163,184,.75); }
 .hdd-tile.smart-bad  .led-dot{ background:#ff4a4a; box-shadow:0 0 8px rgba(255,74,74,.85); }
+.hdd-tile.status-dead .led-dot{ background:var(--status-dead); box-shadow:0 0 8px rgba(153,27,27,.85); }
+.hdd-tile.status-critical .led-dot{ background:var(--status-critical); box-shadow:0 0 8px rgba(239,68,68,.85); }
 .hdd-tile.smart-spare .led-dot{ background:#e9ecef; box-shadow:0 0 6px rgba(233,236,239,.6); }
 .hdd-tile.empty      .led-dot{ background:#fff; box-shadow:0 0 6px rgba(255,255,255,.7); }
 .hdd-tile.smart-unused .led-dot{  background:#2da8ff;  box-shadow:0 0 10px rgba(45,168,255,.9);}
+
+.status-badge{
+  position:absolute;
+  top:8px;
+  left:50px;
+  z-index:4;
+  padding:2px 7px;
+  border-radius:5px;
+  font-size:10px;
+  font-weight:800;
+  line-height:16px;
+  color:#052e16;
+  background:var(--status-ok);
+  box-shadow:0 4px 10px rgba(0,0,0,.24);
+}
+.status-badge.status-dead{ color:#fff; background:var(--status-dead); }
+.status-badge.status-critical{ color:#fff; background:var(--status-critical); }
+.status-badge.status-dangerous{ color:#fff; background:var(--status-dangerous); }
+.status-badge.status-suspect{ color:#111827; background:var(--status-suspect); }
+.status-badge.status-interface{ color:#fff; background:var(--status-interface); }
+.status-badge.status-maintenance{ color:#083344; background:var(--status-maintenance); }
+.status-badge.status-unknown{ color:#111827; background:var(--status-unknown); }
+.status-badge.status-info{ color:#fff; background:var(--status-info); }
+.panel-c1 .status-badge{ display:none; }
 
 .tile-led-toggle{
   position:absolute;
@@ -536,6 +684,145 @@ html.theme-light{
 }
 .detail-grid strong{ color:#f0f3f7; }
 .detail-grid span{ min-width:0; overflow-wrap:anywhere; }
+.drive-hero{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px;
+  border-radius:8px;
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  margin-bottom:14px;
+}
+.drive-hero-title{
+  margin:0;
+  font-size:18px;
+  font-weight:800;
+  color:var(--title);
+}
+.drive-hero-sub{
+  color:var(--muted);
+  font-size:13px;
+  margin-top:3px;
+}
+.modal-status-pill{
+  padding:5px 9px;
+  border-radius:6px;
+  font-size:12px;
+  font-weight:800;
+  background:var(--status-ok);
+  color:#052e16;
+  white-space:nowrap;
+}
+.modal-status-pill.status-dead{ background:var(--status-dead); color:#fff; }
+.modal-status-pill.status-critical{ background:var(--status-critical); color:#fff; }
+.modal-status-pill.status-dangerous{ background:var(--status-dangerous); color:#fff; }
+.modal-status-pill.status-suspect{ background:var(--status-suspect); color:#111827; }
+.modal-status-pill.status-interface{ background:var(--status-interface); color:#fff; }
+.modal-status-pill.status-maintenance{ background:var(--status-maintenance); color:#083344; }
+.modal-status-pill.status-unknown{ background:var(--status-unknown); color:#111827; }
+.detail-section{
+  padding:12px 14px;
+  border-radius:8px;
+  background:rgba(255,255,255,.035);
+  border:1px solid var(--border);
+  margin-bottom:12px;
+}
+.detail-section-title{
+  margin:0 0 10px;
+  font-size:13px;
+  font-weight:800;
+  color:var(--title);
+}
+.metric-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:10px;
+}
+.metric-card{
+  border-radius:8px;
+  background:rgba(255,255,255,.045);
+  border:1px solid var(--border);
+  padding:9px 10px;
+}
+.metric-label{
+  display:block;
+  color:var(--muted);
+  font-size:11px;
+  text-transform:uppercase;
+  font-weight:800;
+}
+.metric-value{
+  display:block;
+  color:var(--title);
+  margin-top:3px;
+  font-weight:700;
+  overflow-wrap:anywhere;
+}
+.criteria-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(245px, 1fr));
+  gap:12px;
+}
+.criteria-card{
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:rgba(255,255,255,.035);
+  padding:12px 14px;
+}
+.criteria-card h6{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 8px;
+  color:var(--title);
+  font-size:14px;
+  font-weight:800;
+}
+.criteria-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:20px;
+  padding:2px 7px;
+  border-radius:5px;
+  font-size:11px;
+  font-weight:800;
+  color:#052e16;
+  background:var(--status-ok);
+}
+.criteria-chip.status-dead{ color:#fff; background:var(--status-dead); }
+.criteria-chip.status-critical{ color:#fff; background:var(--status-critical); }
+.criteria-chip.status-dangerous{ color:#fff; background:var(--status-dangerous); }
+.criteria-chip.status-suspect{ color:#111827; background:var(--status-suspect); }
+.criteria-chip.status-interface{ color:#fff; background:var(--status-interface); }
+.criteria-chip.status-maintenance{ color:#083344; background:var(--status-maintenance); }
+.criteria-chip.status-unknown{ color:#111827; background:var(--status-unknown); }
+.criteria-chip.status-info{ color:#fff; background:var(--status-info); }
+.criteria-card ul{
+  margin:0;
+  padding-left:18px;
+  color:var(--text);
+  font-size:13px;
+}
+.criteria-card li{ margin-bottom:5px; }
+.criteria-note{
+  display:block;
+  margin-top:12px;
+  color:var(--muted);
+  font-size:12px;
+}
+@media (min-width: 768px){
+  .metric-grid{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 767px){
+  .app-header{ align-items:flex-start; }
+  .app-title{ font-size:24px; }
+  .top-status-actions,
+  .display-options-controls{ justify-content:flex-start; width:100%; }
+  .display-options-controls .input-group{ width:100% !important; }
+  .metric-grid{ grid-template-columns:1fr; }
+}
 
 html.theme-light .nas-panel{
   box-shadow: 0 10px 24px rgba(15,23,42,0.09), inset 0 0 0 1px rgba(15,23,42,0.05);
@@ -549,6 +836,11 @@ html.theme-light .modal-content{
 }
 html.theme-light .text-muted{ color: var(--muted) !important; }
 html.theme-light .detail-grid strong{ color: var(--title); }
+html.theme-light .detail-section,
+html.theme-light .metric-card,
+html.theme-light .criteria-card{
+  background:#f8fafc;
+}
 html.theme-light .modal-content{
   background: var(--panel) !important;
   border-color: var(--border) !important;
@@ -595,43 +887,45 @@ html.theme-light .btn-outline-secondary{
 <div class="page-wrap">
 <div class="container">
 
+<div class="app-header">
+  <h1 class="app-title"><?php echo tdm_h('page.title'); ?></h1>
+  <span class="app-version"><?php echo tdm_h('app.version', array('version' => $app_version)); ?></span>
+</div>
 
-<div class="top-status-bar d-flex align-items-center justify-content-between mb-2"
-     style="background:#1f2330;border-radius:10px;padding:8px 12px; border:1px solid rgba(255,255,255,0.06)">
-  <div class="text-light">
+<div class="top-status-bar d-flex align-items-center justify-content-between mb-2 p-2">
+  <div class="top-status-meta text-light">
     <strong><?php echo tdm_h('last_update.label'); ?></strong>:
     <span><?php echo htmlspecialchars($latest_dt); ?></span>
     <span class="text-muted">(<?php echo tdm_h('last_update.ago', array('age' => $age_text)); ?>)</span>
-    <span class="text-muted ml-2">| <?php echo tdm_h('last_update.files', array('count' => (int)$files_count)); ?></span>
-  </div>
-  <div>
     <?php if ($is_stale): ?>
       <span style="color:#ff5858; font-weight:700;"><?php echo tdm_h('last_update.stale'); ?></span>
     <?php else: ?>
       <span class="text-success"><?php echo tdm_h('status.ok'); ?></span>
     <?php endif; ?>
+    <span class="text-muted"><?php echo tdm_h('last_update.files', array('count' => (int)$files_count)); ?></span>
   </div>
 
-    <button id="btnRegen" type="button" class="btn btn-sm btn-outline-info ml-3">
-    <?php echo tdm_h('refresh.button'); ?>
-  </button>
-  <button id="btnApiSettings" type="button" class="btn btn-sm btn-outline-light ml-2">
-    <?php echo tdm_h('api.button'); ?>
-  </button>
-  <button id="btnTheme" type="button" class="btn btn-sm btn-outline-light ml-2"
-          aria-pressed="false" title="<?php echo tdm_h('theme.toggle'); ?>">
-    <?php echo tdm_h('theme.light'); ?>
-  </button>
+  <div class="top-status-actions">
+    <button id="btnRegen" type="button" class="btn btn-sm btn-outline-info">
+      <?php echo tdm_h('refresh.button'); ?>
+    </button>
+    <button id="btnApiSettings" type="button" class="btn btn-sm btn-outline-light">
+      <?php echo tdm_h('api.button'); ?>
+    </button>
+    <button id="btnTheme" type="button" class="btn btn-sm btn-outline-light"
+            aria-pressed="false" title="<?php echo tdm_h('theme.toggle'); ?>">
+      <?php echo tdm_h('theme.light'); ?>
+    </button>
+  </div>
 
 </div>
 
 
-<div class="display-options-bar d-flex align-items-center justify-content-between mb-3"
-     style="background:#232730;border-radius:10px;padding:10px 12px">
+<div class="display-options-bar d-flex align-items-center justify-content-between mb-3 p-2">
   <div class="text-light font-weight-bold"><?php echo tdm_h('display.options'); ?></div>
 
-  <div class="d-flex align-items-center">
-    <div class="mr-3 text-light">
+  <div class="display-options-controls">
+    <div class="text-light">
       <label class="mb-0" style="cursor:pointer">
         <input type="checkbox" id="toggleShort" checked>
         <span class="ml-2"><?php echo tdm_h('display.hide_full_pool_names'); ?></span>
@@ -645,23 +939,20 @@ html.theme-light .btn-outline-secondary{
         <button id="btnClearSearch" class="btn btn-sm btn-outline-light" type="button"><?php echo tdm_h('button.clear'); ?></button>
       </div>
     </div>
-	
-<div class="ml-3 d-flex">
-  <select id="poolFilter" class="custom-select custom-select-sm" style="width: 200px;">
-    <option value=""><?php echo tdm_h('select.unselected'); ?></option>
-    <?php foreach ($pool_options as $pn): ?>
-      <option value="<?php echo htmlspecialchars($pn); ?>">
-        <?php echo htmlspecialchars($pn); ?>
-      </option>
-    <?php endforeach; ?>
-  </select>
-  <div class="input-group-append ml-2">
-    <button id="btnClearPool" class="btn btn-sm btn-outline-light" type="button"><?php echo tdm_h('button.reset'); ?></button>
-  </div>
-</div>
 
-
-	
+    <div class="d-flex">
+      <select id="poolFilter" class="custom-select custom-select-sm" style="width: 200px;">
+        <option value=""><?php echo tdm_h('select.unselected'); ?></option>
+        <?php foreach ($pool_options as $pn): ?>
+          <option value="<?php echo htmlspecialchars($pn); ?>">
+            <?php echo htmlspecialchars($pn); ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+      <div class="input-group-append ml-2">
+        <button id="btnClearPool" class="btn btn-sm btn-outline-light" type="button"><?php echo tdm_h('button.reset'); ?></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -782,6 +1073,8 @@ html.theme-light .btn-outline-secondary{
             $cmd_off = $has ? $info['cmd_off'] : '';
             $meta_summary = $has ? tdm_disk_meta_summary($meta) : '';
             $counter_summary = $has ? tdm_disk_counter_summary($meta) : '';
+            $status_name = $has ? tdm_status_name($smart_raw) : 'EMPTY';
+            $status_class = tdm_status_slug($status_name);
 
 
 			// === mapare device -> 'sda' etc. pt comparatie cu pool-urile ===
@@ -810,11 +1103,11 @@ html.theme-light .btn-outline-secondary{
 			}
 
 			// === dacă e SPARE, forțăm clasa vizuală smart-spare ===
-			// === NEFOLOSIT? (dacă apare în lista „unused”, ignorăm pool/spare) ===
+			// === UNUSED? (dacă apare în lista „unused”, ignorăm pool/spare) ===
 			$is_unused = false;
 			if ($dev_short !== '' && isset($unused_by_disk[$dev_short])) {
 				$is_unused = true;
-				$pool_name = 'NEFOLOSIT';
+				$pool_name = 'UNUSED';
 				$is_spare  = false; // nefolosit ≠ spare
 			}
 			
@@ -831,6 +1124,10 @@ html.theme-light .btn-outline-secondary{
 				$tileCls = 'hdd-tile ' . ($has ? $cls : 'empty');
 			}
 
+            if ($has) {
+                $tileCls .= ' status-' . $status_class;
+            }
+
 			
 			// --- short name (doar pentru pagina principală) ---
 			$pool_name_short = $pool_name;
@@ -844,7 +1141,7 @@ html.theme-light .btn-outline-secondary{
 			// === label pentru Slot cu [pool] si - SPARE ===
 			// --- short name (doar pe pagină) ---
 			$pool_name_short = $pool_name;
-			if ($pool_name_short !== '' && $pool_name_short !== 'NEFOLOSIT') {
+			if ($pool_name_short !== '' && $pool_name_short !== 'UNUSED') {
 				if (strlen($pool_name_short) > 5) {
 					$pool_name_short = substr($pool_name_short, 0, 5) . '...';
 				}
@@ -861,17 +1158,6 @@ html.theme-light .btn-outline-secondary{
 			if ($is_spare) {
 				$slotLabelHtml .= ' - SPARE';
 			}
-
-
-
-
-            $tileCls = 'hdd-tile ';
-            if ($has) {
-                $tileCls .= $cls;
-            } else {
-                $tileCls .= 'empty';
-            }
-
             // text nume + serial
             $labelText = $device;
             if ($serial !== '') {
@@ -896,11 +1182,17 @@ html.theme-light .btn-outline-secondary{
 			  <?php echo tdm_js($pool_name); ?>,
 			  <?php echo $is_spare ? 'true' : 'false'; ?>,
               <?php echo tdm_js($meta); ?>,
-              <?php echo tdm_js($counter_summary); ?>
+              <?php echo tdm_js($counter_summary); ?>,
+              <?php echo tdm_js($status_name); ?>
 			)"
 			>
           <div class="hdd-content">
             <span class="led-dot" aria-hidden="true"></span>
+            <?php if ($has): ?>
+              <span class="status-badge status-<?php echo htmlspecialchars($status_class); ?>">
+                <?php echo htmlspecialchars($status_name); ?>
+              </span>
+            <?php endif; ?>
             <?php if ($has && $cmd_on !== '' && $cmd_off !== ''): ?>
               <button type="button"
                       class="tile-led-toggle"
@@ -935,19 +1227,33 @@ html.theme-light .btn-outline-secondary{
       <span><?php echo tdm_h('legend.ok'); ?></span>
     </div>
     <div class="legend-item">
+      <span class="led-dot-legend smart-dead"></span>
+      <span><?php echo tdm_h('legend.dead'); ?></span>
+    </div>
+    <div class="legend-item">
+      <span class="led-dot-legend smart-critical"></span>
+      <span><?php echo tdm_h('legend.critical'); ?></span>
+    </div>
+    <div class="legend-item">
+      <span class="led-dot-legend smart-danger"></span>
+      <span><?php echo tdm_h('legend.danger'); ?></span>
+    </div>
+    <div class="legend-item">
       <span class="led-dot-legend smart-warn"></span>
       <span><?php echo tdm_h('legend.warn'); ?></span>
     </div>
-
-	<div class="legend-item">
-	  <span class="led-dot-legend smart-bad"></span>
-	  <span><?php echo tdm_h('legend.dead'); ?></span>
-	</div>
-	<div class="legend-item">
-	  <span class="led-dot-legend smart-bad"></span>
-	  <span><?php echo tdm_h('legend.danger'); ?></span>
-	</div>
-
+    <div class="legend-item">
+      <span class="led-dot-legend smart-interface"></span>
+      <span><?php echo tdm_h('legend.interface'); ?></span>
+    </div>
+    <div class="legend-item">
+      <span class="led-dot-legend smart-maintenance"></span>
+      <span><?php echo tdm_h('legend.maintenance'); ?></span>
+    </div>
+    <div class="legend-item">
+      <span class="led-dot-legend smart-unknown"></span>
+      <span><?php echo tdm_h('legend.unknown'); ?></span>
+    </div>
     <div class="legend-item">
       <span class="led-dot-legend smart-spare"></span>
       <span><?php echo tdm_h('legend.spare'); ?></span>
@@ -967,47 +1273,75 @@ html.theme-light .btn-outline-secondary{
 <div class="nas-panel mt-3">
   <h5 class="nas-title mb-3"><?php echo tdm_h('smart.criteria.title'); ?></h5>
 
-  <ul class="mb-2 pl-3">
-
-	<li class="mb-2">
-	  <strong class="text-danger"><?php echo tdm_h('smart.criteria.dead'); ?></strong>
-	  <ul class="mt-1">
-		<li><?php echo tdm_h('smart.criteria.failed_overall'); ?></li>
-		<li><?php echo tdm_h('smart.criteria.failed_selftest'); ?></li>
-		<li><?php echo tdm_h('smart.criteria.pending_uncorrectable'); ?></li>
-		<li><?php echo tdm_h('smart.criteria.reallocated_critical'); ?></li>
-	  </ul>
-	</li>
-    <li class="mb-2">
-      <strong class="text-danger"><?php echo tdm_h('smart.criteria.danger'); ?></strong>
-      <ul class="mt-1">
+  <div class="criteria-grid">
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-dead">DEAD</span><?php echo tdm_h('smart.criteria.dead'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.failed_overall'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.failed_selftest'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.pending_uncorrectable'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-critical">CRITICAL</span><?php echo tdm_h('smart.criteria.critical'); ?></h6>
+      <ul>
         <li><?php echo tdm_h('smart.criteria.pending'); ?></li>
         <li><?php echo tdm_h('smart.criteria.uncorrectable'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.reallocated_danger'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.reported_uncorrectable'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.read_failure'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.reallocated_critical'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.multiple_media'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.temp_critical'); ?></li>
       </ul>
-    </li>
-
-    <li class="mb-2">
-      <strong class="text-warning"><?php echo tdm_h('smart.criteria.tired'); ?></strong>
-      <ul class="mt-1">
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-dangerous">DANGEROUS</span><?php echo tdm_h('smart.criteria.danger'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.reallocated_danger'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.retry_danger'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.temp_danger'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-suspect">SUSPECT</span><?php echo tdm_h('smart.criteria.suspect'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.retry_any'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.temp_suspect'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-interface">INTERFACE</span><?php echo tdm_h('smart.criteria.interface'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.interface_crc'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.interface_path'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-maintenance">MAINTENANCE</span><?php echo tdm_h('smart.criteria.maintenance'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.maintenance_tests'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.maintenance_missing'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-unknown">UNKNOWN</span><?php echo tdm_h('smart.criteria.unknown'); ?></h6>
+      <ul>
+        <li><?php echo tdm_h('smart.criteria.unknown_read'); ?></li>
+      </ul>
+    </div>
+    <div class="criteria-card">
+      <h6><span class="criteria-chip status-info">INFO</span><?php echo tdm_h('smart.criteria.info'); ?></h6>
+      <ul>
         <li><?php echo tdm_h('smart.criteria.load_cycle'); ?></li>
         <li><?php echo tdm_h('smart.criteria.reallocated_tired'); ?></li>
       </ul>
-    </li>
+    </div>
+  </div>
 
-    <li class="mb-2">
-      <strong class="text-info"><?php echo tdm_h('smart.criteria.suspect'); ?></strong>
-      <ul class="mt-1">
-        <li><?php echo tdm_h('smart.criteria.read_fail'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
-      </ul>
-    </li>
-  </ul>
-
-	 <small class="text-muted d-block">
-	  <?php echo tdm_h('smart.criteria.note'); ?>
-	</small>
+  <small class="criteria-note">
+    <?php echo tdm_h('smart.criteria.note'); ?>
+  </small>
 
 </div>
 
@@ -1023,7 +1357,7 @@ html.theme-light .btn-outline-secondary{
 
 <!-- Modal control LED -->
 <div class="modal fade" id="driveModal" tabindex="-1" role="dialog" aria-labelledby="driveModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
     <div class="modal-content" style="background:#232730;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
       <div class="modal-header">
         <div>
@@ -1039,51 +1373,72 @@ html.theme-light .btn-outline-secondary{
       </div>
 
       <div class="modal-body">
-    <div><strong><?php echo tdm_h('modal.slot'); ?></strong> <span id="mSlot" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span></div>
+        <div class="drive-hero">
+          <div>
+            <p id="mHeroSlot" class="drive-hero-title">Slot</p>
+            <div id="mHeroDevice" class="drive-hero-sub">-</div>
+          </div>
+          <span id="mStatusPill" class="modal-status-pill status-unknown">UNKNOWN</span>
+        </div>
 
-<!-- Nume: împărțit pe device/serial + wrapper pentru „full” -->
-<div>
-  <strong><?php echo tdm_h('modal.name'); ?></strong>
-  <span id="mNameFull" class="copyable" title="<?php echo tdm_h('modal.copy_whole'); ?>">
-    <span id="mNameDev"
-          class="copyable"
-          data-copy="dev"
-          title="<?php echo tdm_h('modal.copy_device'); ?>"></span>
-    <span id="mNameBrL" class="text-muted" style="display:none">[ </span>
-    <span id="mNameSerial"
-          class="copyable"
-          data-copy="serial"
-          style="display:none"
-          title="<?php echo tdm_h('modal.copy_serial'); ?>"></span>
-    <span id="mNameBrR" class="text-muted" style="display:none"> ]</span>
-  </span>
-</div>
+        <div class="detail-section">
+          <p class="detail-section-title"><?php echo tdm_h('modal.identity'); ?></p>
+          <div class="detail-grid">
+            <strong><?php echo tdm_h('modal.slot'); ?></strong>
+            <span id="mSlot" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span>
 
-<div class="detail-grid mt-2">
-  <strong><?php echo tdm_h('modal.model'); ?></strong>
-  <span id="mModel" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+            <strong><?php echo tdm_h('modal.name'); ?></strong>
+            <span id="mNameFull" class="copyable" title="<?php echo tdm_h('modal.copy_whole'); ?>">
+              <span id="mNameDev"
+                    class="copyable"
+                    data-copy="dev"
+                    title="<?php echo tdm_h('modal.copy_device'); ?>"></span>
+              <span id="mNameBrL" class="text-muted" style="display:none">[ </span>
+              <span id="mNameSerial"
+                    class="copyable"
+                    data-copy="serial"
+                    style="display:none"
+                    title="<?php echo tdm_h('modal.copy_serial'); ?>"></span>
+              <span id="mNameBrR" class="text-muted" style="display:none"> ]</span>
+            </span>
 
-  <strong><?php echo tdm_h('modal.capacity'); ?></strong>
-  <span id="mCapacity" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+            <strong><?php echo tdm_h('modal.model'); ?></strong>
+            <span id="mModel" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+        </div>
 
-  <strong><?php echo tdm_h('modal.power_hours'); ?></strong>
-  <span id="mPowerHours" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+        <div class="metric-grid mb-3">
+          <div class="metric-card">
+            <span class="metric-label"><?php echo tdm_h('modal.capacity'); ?></span>
+            <span id="mCapacity" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label"><?php echo tdm_h('modal.power_hours'); ?></span>
+            <span id="mPowerHours" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label"><?php echo tdm_h('modal.temperature'); ?></span>
+            <span id="mTemperature" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label"><?php echo tdm_h('modal.pool'); ?></span>
+            <span id="mPool" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+        </div>
 
-  <strong><?php echo tdm_h('modal.temperature'); ?></strong>
-  <span id="mTemperature" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+        <div class="detail-section mb-0">
+          <p class="detail-section-title"><?php echo tdm_h('modal.health'); ?></p>
+          <div class="detail-grid">
+            <strong><?php echo tdm_h('modal.state'); ?></strong>
+            <span id="mSmart" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span>
 
-  <strong><?php echo tdm_h('modal.disk_location'); ?></strong>
-  <span id="mLocatieDisk" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+            <strong><?php echo tdm_h('modal.counters'); ?></strong>
+            <span id="mCounters" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
 
-  <strong><?php echo tdm_h('modal.state'); ?></strong>
-  <span id="mSmart" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span>
-
-  <strong><?php echo tdm_h('modal.counters'); ?></strong>
-  <span id="mCounters" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
-
-  <strong><?php echo tdm_h('modal.pool'); ?></strong>
-  <span id="mPool" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
-</div>
+            <strong><?php echo tdm_h('modal.disk_location'); ?></strong>
+            <span id="mLocatieDisk" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+        </div>
 
       </div>
 
@@ -1287,24 +1642,35 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 });
 
-function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters) {
+function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters, statusName) {
   meta = meta || {};
   var nameWithSerial = name || 'Empty';
   if (serial) nameWithSerial += ' [ ' + serial + ' ]';
+  var normalizedStatus = (statusName || 'UNKNOWN').toString().trim().toUpperCase();
+  if (!normalizedStatus) normalizedStatus = 'UNKNOWN';
+  var statusSlug = normalizedStatus.toLowerCase().replace(/_/g, '-').replace(/[^a-z0-9-]/g, '') || 'unknown';
 
   // slot & restul
   document.getElementById('mSlot').textContent  = '#' + slot;
-  document.getElementById('mLocatieDisk').textContent = locatie || '—';
-  document.getElementById('mSmart').textContent = smart || '—';
-  document.getElementById('mModel').textContent = meta.model || '—';
-  document.getElementById('mCapacity').textContent = meta.capacity || '—';
-  document.getElementById('mPowerHours').textContent = meta.power_hours ? Number(meta.power_hours).toLocaleString() + 'h' : '—';
-  document.getElementById('mTemperature').textContent = meta.temperature_c ? meta.temperature_c + 'C' : '—';
-  document.getElementById('mCounters').textContent = counters || '—';
+  document.getElementById('mHeroSlot').textContent = 'Slot #' + slot;
+  document.getElementById('mHeroDevice').textContent = nameWithSerial;
+  document.getElementById('mLocatieDisk').textContent = locatie || '-';
+  document.getElementById('mSmart').textContent = smart || '-';
+  document.getElementById('mModel').textContent = meta.model || '-';
+  document.getElementById('mCapacity').textContent = meta.capacity || '-';
+  document.getElementById('mPowerHours').textContent = meta.power_hours ? Number(meta.power_hours).toLocaleString() + 'h' : '-';
+  document.getElementById('mTemperature').textContent = meta.temperature_c ? meta.temperature_c + 'C' : '-';
+  document.getElementById('mCounters').textContent = counters || '-';
+
+  var statusPill = document.getElementById('mStatusPill');
+  if (statusPill) {
+    statusPill.textContent = normalizedStatus;
+    statusPill.className = 'modal-status-pill status-' + statusSlug;
+  }
 
   // Pool
-  var poolText = poolName || '—';
-  if (isSpare) poolText += (poolText !== '—' ? ' ' : '') + '(SPARE)';
+  var poolText = poolName || '-';
+  if (isSpare) poolText += (poolText !== '-' ? ' ' : '') + '(SPARE)';
   document.getElementById('mPool').textContent = poolText;
 
   // --- Nume (granular) ---
@@ -1683,7 +2049,7 @@ $(function(){
     // dblclick pe serial => copiază serialul
     $m.find('#mNameSerial').off('dblclick.copySer').on('dblclick.copySer', function(){
       var v = ($(this).text()||'').trim();
-      if (!v || v==='—') return;
+      if (!v || v==='-') return;
       copyToClipboard(v).then(function(){ showCopyHint(v); });
     });
 
@@ -1692,7 +2058,7 @@ $(function(){
       // să nu suprascriem logica specială de mai sus
       if (this.id==='mNameFull' || this.id==='mNameDev' || this.id==='mNameSerial') return;
       var v = ($(this).text()||'').trim();
-      if (!v || v==='—') return;
+      if (!v || v==='-') return;
       copyToClipboard(v).then(function(){ showCopyHint(v); });
     });
   }).on('hide.bs.modal', function(){

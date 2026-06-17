@@ -68,11 +68,19 @@ function tdm_format_smart_status($state, array $d)
     $bits = array(
         "Overall=" . ($d['overall_health'] !== '' ? $d['overall_health'] : 'UNKNOWN'),
         "Realloc=" . $d['reallocated'],
+        "ReallocEvents=" . $d['reallocation_events'],
         "Pending=" . $d['pending'],
         "Uncorrect=" . $d['uncorrectable'],
+        "ReportedUncorrect=" . $d['reported_uncorrectable'],
+        "EndToEnd=" . $d['end_to_end_errors'],
         "CRC=" . $d['crc_errors'],
         "ATA_Errors=" . $d['ata_errors'],
     );
+
+    if ($d['temperature_c'] !== '')
+    {
+        $bits[] = "Temp=" . $d['temperature_c'] . "C";
+    }
 
     if ($d['selftest_failed'])
     {
@@ -98,12 +106,20 @@ function get_smart_report($dev)
         'reallocated' => 0,
         'pending' => 0,
         'uncorrectable' => 0,
+        'reported_uncorrectable' => 0,
+        'end_to_end_errors' => 0,
+        'reallocation_events' => 0,
+        'spin_retry_count' => 0,
+        'calibration_retry_count' => 0,
+        'command_timeout' => 0,
+        'high_fly_writes' => 0,
         'crc_errors' => 0,
         'ata_errors' => 0,
         'load_cycle_count' => 0,
         'overall_health' => '',
         'selftest_failed' => false,
         'read_failure' => false,
+        'selftest_incomplete' => false,
     );
 
     if ($dev === "N/A")
@@ -163,6 +179,34 @@ function get_smart_report($dev)
         {
             $details['uncorrectable'] = tdm_smart_attr_raw($line, 198, 'Offline_Uncorrectable');
         }
+        elseif (preg_match('/^187\s+Reported_Uncorrect\b/i', $line))
+        {
+            $details['reported_uncorrectable'] = tdm_smart_attr_raw($line, 187, 'Reported_Uncorrect');
+        }
+        elseif (preg_match('/^184\s+End-to-End_Error\b/i', $line))
+        {
+            $details['end_to_end_errors'] = tdm_smart_attr_raw($line, 184, 'End-to-End_Error');
+        }
+        elseif (preg_match('/^196\s+Reallocated_Event_Count\b/i', $line))
+        {
+            $details['reallocation_events'] = tdm_smart_attr_raw($line, 196, 'Reallocated_Event_Count');
+        }
+        elseif (preg_match('/^10\s+Spin_Retry_Count\b/i', $line))
+        {
+            $details['spin_retry_count'] = tdm_smart_attr_raw($line, 10, 'Spin_Retry_Count');
+        }
+        elseif (preg_match('/^11\s+Calibration_Retry_Count\b/i', $line))
+        {
+            $details['calibration_retry_count'] = tdm_smart_attr_raw($line, 11, 'Calibration_Retry_Count');
+        }
+        elseif (preg_match('/^188\s+Command_Timeout\b/i', $line))
+        {
+            $details['command_timeout'] = tdm_smart_attr_raw($line, 188, 'Command_Timeout');
+        }
+        elseif (preg_match('/^189\s+High_Fly_Writes\b/i', $line))
+        {
+            $details['high_fly_writes'] = tdm_smart_attr_raw($line, 189, 'High_Fly_Writes');
+        }
         elseif (preg_match('/^193\s+Load_Cycle_Count\b/i', $line))
         {
             $details['load_cycle_count'] = tdm_smart_attr_raw($line, 193, 'Load_Cycle_Count');
@@ -216,6 +260,11 @@ function get_smart_report($dev)
         $details['read_failure'] = true;
     }
 
+    if (preg_match('/(Aborted by host|Interrupted|manually stopped|Self-test routine in progress)/i', $smart))
+    {
+        $details['selftest_incomplete'] = true;
+    }
+
     // ATA Error Count (nu toate modelele il au)
     if (preg_match('/ATA\s+Error\s+Count:\s*(\d+)/i', $smart, $m))
     {
@@ -230,29 +279,84 @@ function get_smart_report($dev)
         }
     }
 
+    $has_meaningful_smart_data = (
+        $details['model'] !== '' ||
+        $details['capacity'] !== '' ||
+        $details['overall_health'] !== '' ||
+        $details['power_hours'] > 0 ||
+        $details['temperature_c'] !== '' ||
+        $details['reallocated'] > 0 ||
+        $details['pending'] > 0 ||
+        $details['uncorrectable'] > 0 ||
+        $details['reported_uncorrectable'] > 0 ||
+        $details['end_to_end_errors'] > 0 ||
+        $details['reallocation_events'] > 0 ||
+        $details['crc_errors'] > 0 ||
+        $details['ata_errors'] > 0
+    );
+
+    if (!$has_meaningful_smart_data &&
+        ($code !== 0 ||
+        preg_match('/(read device identity failed|unable to detect device type|please specify device type|unsupported|unavailable|permission denied|operation not permitted|no such device|input\/output error|inquiry failed|scsi error)/i', $smart)))
+    {
+        return array('status' => "UNKNOWN (smartctl read or parse failed)", 'details' => $details);
+    }
+
     $overall_passed = ($details['overall_health'] === '' || $details['overall_health'] === 'PASSED' || $details['overall_health'] === 'OK');
 
-    // ORDONARE SEVERITATI:
-    // 1) DEAD: SMART not passed, self-test failure, or severe combinations
-    if (!$overall_passed || $details['selftest_failed'] || ($details['pending'] > 0 && $details['uncorrectable'] > 0) || $details['reallocated'] >= 100)
+    $temp = $details['temperature_c'] !== '' ? (int)$details['temperature_c'] : null;
+    $active_media_indicators = 0;
+    foreach (array('reallocated', 'reallocation_events', 'pending', 'uncorrectable', 'reported_uncorrectable', 'end_to_end_errors') as $indicator)
+    {
+        if ($details[$indicator] > 0)
+        {
+            $active_media_indicators++;
+        }
+    }
+
+    if (!$overall_passed || (($details['pending'] > 0 || $details['uncorrectable'] > 0) && $details['selftest_failed']))
     {
         return array('status' => tdm_format_smart_status("DEAD", $details), 'details' => $details);
     }
 
-    // 2) DANGEROUS: clear risk signals
-    if ($details['pending'] > 0 || $details['uncorrectable'] > 0 || $details['reallocated'] > 10)
+    if ($details['pending'] > 0 ||
+        $details['uncorrectable'] > 0 ||
+        $details['reported_uncorrectable'] > 0 ||
+        $details['end_to_end_errors'] > 0 ||
+        $details['read_failure'] ||
+        $details['reallocated'] >= 100 ||
+        $details['reallocation_events'] >= 100 ||
+        ($temp !== null && $temp >= 55) ||
+        $active_media_indicators >= 2)
+    {
+        return array('status' => tdm_format_smart_status("CRITICAL", $details), 'details' => $details);
+    }
+
+    if (($details['reallocated'] >= 10 && $details['reallocated'] <= 99) ||
+        ($details['reallocation_events'] >= 10 && $details['reallocation_events'] <= 99) ||
+        $details['spin_retry_count'] >= 3 ||
+        $details['calibration_retry_count'] >= 3 ||
+        ($temp !== null && $temp >= 50 && $temp <= 54))
     {
         return array('status' => tdm_format_smart_status("DANGEROUS", $details), 'details' => $details);
     }
 
-    // 3) SUSPECT: non-critical counters that should be reviewed.
-    // Load_Cycle_Count is shown as info only; it is too noisy to mark a disk bad by itself.
-    if ($details['read_failure'] || $details['reallocated'] > 0 || $details['ata_errors'] > 0)
+    if (($details['reallocated'] >= 1 && $details['reallocated'] <= 9) ||
+        ($details['reallocation_events'] >= 1 && $details['reallocation_events'] <= 9) ||
+        $details['spin_retry_count'] > 0 ||
+        $details['calibration_retry_count'] > 0 ||
+        $details['command_timeout'] > 0 ||
+        $details['high_fly_writes'] > 0 ||
+        ($temp !== null && $temp >= 45 && $temp <= 49))
     {
         return array('status' => tdm_format_smart_status("SUSPECT", $details), 'details' => $details);
     }
 
-    // 4) OK
+    if ($details['selftest_incomplete'] || $details['temperature_c'] === '')
+    {
+        return array('status' => tdm_format_smart_status("MAINTENANCE", $details), 'details' => $details);
+    }
+
     return array('status' => tdm_format_smart_status("OK", $details), 'details' => $details);
 }
 
@@ -407,6 +511,13 @@ foreach ($source_files as $file)
                 $smart_details['crc_errors'],
                 $smart_details['ata_errors'],
                 $smart_details['load_cycle_count'],
+                $smart_details['reported_uncorrectable'],
+                $smart_details['end_to_end_errors'],
+                $smart_details['reallocation_events'],
+                $smart_details['spin_retry_count'],
+                $smart_details['calibration_retry_count'],
+                $smart_details['command_timeout'],
+                $smart_details['high_fly_writes'],
             );
 
             $fields = array_map('tdm_clean_ses_field', $fields);
