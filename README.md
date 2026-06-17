@@ -275,7 +275,7 @@ To add API details, open `API Settings` in the web interface and enter:
 
 •	API URL, for example `https://TRUENAS_IP/api/v2.0`
 
-•	API key from `Credentials` / `API Keys` in the TrueNAS UI
+•	API key from the TrueNAS UI
 
 The settings are saved in the mounted `data` directory.
 
@@ -291,19 +291,45 @@ The API calls used by this app are read-only:
 
 •	`GET /api/v2.0/boot/get_disks` or `POST /api/v2.0/core/call` with `boot.get_disks`
 
-Recommended setup:
+TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access rights of the user selected when the key is created, so the safest setup is to create a dedicated low-privilege user for this app if your TrueNAS version lets you do that.
 
-1. In the TrueNAS UI, create or choose a dedicated user for this app, for example `truenas_disk_map_ro`.
+Quick guide:
 
-2. Give that user the most limited read-only role available in your TrueNAS version. It only needs to read disk, pool, and boot-disk metadata.
+1. Log in to the TrueNAS web UI over HTTPS.
 
-3. Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
+2. Create or choose a dedicated user for this app, for example `truenas_disk_map_ro`.
 
-4. Open `Credentials` / `API Keys` in the TrueNAS UI. In some versions this is under the user credentials area.
+3. Give that user the most limited read-only role available in your TrueNAS version. It only needs to read disk, pool, and boot-disk metadata.
 
-5. Create a new key for the dedicated read-only user and copy it immediately. TrueNAS usually only shows the key once.
+4. Open the top-right user/settings menu and select `My API Keys`.
 
-6. In this app, open `API Settings`, enter `https://TRUENAS_IP/api/v2.0`, paste the key, and save.
+5. Click `Add API Key`.
+
+6. Enter a descriptive name, for example `truenas-disk-map`.
+
+7. Select the dedicated user from the `Username` dropdown if the screen asks for one.
+
+8. Leave `Non-expiring` enabled if this is a home/lab install and you do not want scheduled rotation, or disable it and pick an expiration date if you prefer key rotation.
+
+9. Click `Save`.
+
+10. Copy the generated key immediately. TrueNAS shows the API key only once.
+
+11. In this app, open `API Settings`, enter `https://TRUENAS_IP/api/v2.0`, paste the key, and save.
+
+Alternate path:
+
+If your TrueNAS UI does not show `My API Keys`, open `Credentials` > `Users`, select the user, then use the `View API Keys` link in the user access area.
+
+Important notes:
+
+•	Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
+
+•	API keys are sensitive. Treat them like passwords.
+
+•	If you close the TrueNAS key dialog before copying the key, reset the API key and copy the new value.
+
+•	TrueNAS documentation: https://www.truenas.com/docs/scale/25.10/scaletutorials/toptoolbar/managingapikeys/
 
 If your TrueNAS version does not expose a clear read-only role for API keys, leave the API settings empty. The app will still map slots, read SMART data, detect SES, and control identify LEDs; it will only skip pool/spare/unused labels.
 
