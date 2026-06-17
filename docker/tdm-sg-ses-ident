@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 3 ]; then
-    echo "Usage: tdm-sg-ses-ident <set|clear> <slot> /dev/sgN" >&2
+    echo "Usage: tdm-sg-ses-ident <set|clear> <dev-slot-num> /dev/sgN" >&2
     exit 64
 fi
 
@@ -28,4 +28,4 @@ if ! echo "$ses" | grep -Eq '^/dev/sg[0-9]+$'; then
     exit 64
 fi
 
-exec /usr/bin/sg_ses "--index=$slot" "--$action=ident" "$ses"
+exec /usr/bin/sg_ses "--dev-slot-num=$slot" "--$action=ident" "$ses"

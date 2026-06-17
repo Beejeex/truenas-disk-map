@@ -28,7 +28,7 @@ if ($code !== 0)
 
 if (empty($controllers))
 {
-    echo "[WARN] No controllers found by sas3ircu. SES devices may still be visible via lsscsi/sg_ses, but slot-to-disk mapping cannot be generated without controller disk data.\n";
+    echo "[WARN] No controllers found by sas3ircu. The lsscsi/smartctl fallback will be used if SES enclosures are visible.\n";
     if (trim($output) !== "")
     {
         echo "[INFO] sas3ircu output:\n" . trim($output) . "\n";

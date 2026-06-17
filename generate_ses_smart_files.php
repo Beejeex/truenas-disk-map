@@ -6,6 +6,11 @@ require_once __DIR__ . "/hardware_helpers.php";
 // Match by prefix so controller serials still resolve to /dev/sdX entries.
 function get_device_by_serial($serial, $cache_file = "serial_cache.txt")
 {
+    if (preg_match('/^DEV-([A-Za-z0-9._-]+)$/', $serial, $m))
+    {
+        return "/dev/" . $m[1];
+    }
+
     if (!file_exists($cache_file))
     {
         return "N/A";

@@ -2,6 +2,7 @@
 require_once __DIR__ . "/hardware_helpers.php";
 
 $data = "";
+$known_serials = array();
 
 // 1. Luam lista corecta de device-uri din smartctl
 $scan_code = 0;
@@ -40,40 +41,36 @@ foreach ($lines as $line)
                 }
             }
 
-            // Construim comanda inteligent
-            if ($device_type != "")
-            {
-                $info_code = 0;
-                $info = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-i", "-d", $device_type, $dev), $info_code);
-            }
-            else
-            {
-                $info_code = 0;
-                $info = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-i", $dev), $info_code);
-            }
-
-            if ($info)
-            {
-                // Unele returneaza "Serial Number"
-                if (preg_match('/Serial Number:\s*(.+)/i', $info, $match))
-                {
-                    $serial = trim($match[1]);
-                }
-
-                // SAS uneori returneaza "Serial number"
-                if ($serial == "")
-                {
-                    if (preg_match('/Serial number:\s*(.+)/i', $info, $match))
-                    {
-                        $serial = trim($match[1]);
-                    }
-                }
-            }
+            $serial = tdm_get_smart_serial($dev, $device_type);
 
             if ($serial != "")
             {
                 $data .= $serial . " " . $dev . "\n";
+                $known_serials[$serial] = true;
             }
+        }
+    }
+}
+
+$raw_lsscsi = "";
+$lsscsi_code = 0;
+$detected = tdm_detect_lsscsi($raw_lsscsi, $lsscsi_code);
+
+if ($lsscsi_code === 0)
+{
+    foreach ($detected['disks'] as $disk)
+    {
+        $dev = $disk['dev'];
+        if (!tdm_is_safe_dev_path($dev))
+        {
+            continue;
+        }
+
+        $serial = tdm_get_smart_serial($dev);
+        if ($serial != "" && !isset($known_serials[$serial]))
+        {
+            $data .= $serial . " " . $dev . "\n";
+            $known_serials[$serial] = true;
         }
     }
 }

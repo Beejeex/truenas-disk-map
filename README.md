@@ -25,14 +25,18 @@ hdd_controlere/discovery.json
 
 The LED endpoints validate generated `sg_ses` commands server-side before execution. The Docker image also limits passwordless sudo to small validation wrappers instead of allowing raw hardware tools or every command.
 
-The `sas3ircu` dependency is still used for one read-only purpose: controller-to-slot disk inventory. The application calls only:
+`sas3ircu` is used only as a read-only inventory source when it detects the controller. The application calls only:
 
 ```
 sas3ircu list
 sas3ircu <controller> display
 ```
 
-Those calls are routed through `/usr/local/sbin/tdm-sas3ircu-read`, which rejects destructive `sas3ircu` subcommands such as delete, hotspare, offline/online, locate, boot changes, and log clearing. LEDs are controlled separately through `/usr/local/sbin/tdm-sg-ses-ident`, which allows only `sg_ses --set=ident` and `sg_ses --clear=ident`.
+Those calls are routed through `/usr/local/sbin/tdm-sas3ircu-read`, which rejects destructive `sas3ircu` subcommands such as delete, hotspare, offline/online, locate, boot changes, and log clearing.
+
+If `sas3ircu` does not detect the controller, the app falls back to `lsscsi -g` plus `smartctl -i`. For enclosures like `LSI SAS2X36`, disk H:C:T:L target numbers are used as zero-based SES device slot numbers and the matching `enclosu` `/dev/sgN` device is used for LED identify commands.
+
+LEDs are controlled separately through `/usr/local/sbin/tdm-sg-ses-ident`, which allows only `sg_ses --dev-slot-num=N --set=ident` and `sg_ses --dev-slot-num=N --clear=ident`.
 
 
 This project is a small utility written mostly in procedural PHP (i do my best in it) that helps visualize and control disks in a TrueNAS system with SAS controllers and SES enclosures.
@@ -83,7 +87,7 @@ How it works (* it's a bold title it should be like "how it should work")
 
 The system runs a pipeline that collects data from multiple sources:
 1.	Detect SAS controllers
-2.	Read disk information using sas3ircu
+2.	Read disk-slot information using `sas3ircu display`, or fall back to `lsscsi -g` target numbers when `sas3ircu` cannot see the controller
 3.	Associate disk serial numbers
 4.	Collect SMART information using smartctl (for each disk)
 5.	Detect SES enclosures generically from `lsscsi -g`
@@ -130,9 +134,9 @@ You can also:
 
 Example of disk control command execution:
 
-•	sg_ses --set=ident  (found this in the LSI manuals and works to trigger my case)
+•	sg_ses --dev-slot-num=0 --set=ident /dev/sg25  (slot 0 is physical bay 1 on SAS2X36)
 
-•	sg_ses --clear=ident
+•	sg_ses --dev-slot-num=0 --clear=ident /dev/sg25
 
 ________________________________________
 
@@ -142,13 +146,13 @@ This project assumes a system with:
 
 •	TrueNAS SCALE
 
-•	SAS controller supported by `sas3ircu` for controller-to-slot disk data
+•	SAS/SATA disks visible in `lsscsi -g`
 
 •	SES compatible enclosures visible as `enclosu` devices in `lsscsi -g`
 
 •	smartctl
 
-•	sas3ircu
+•	sas3ircu (optional but used when it supports the controller)
 
 •	sg_ses
 
@@ -156,7 +160,7 @@ This project assumes a system with:
 
 The script also uses the TrueNAS API for retrieving pool and disk information.
 
-Note: SES visibility alone is not enough to build the disk map. The app still needs controller disk data from `sas3ircu display` so it can map serial numbers to enclosure slots.
+Note: On hardware where `sas3ircu` does not detect the controller, the fallback assumes the `lsscsi -g` target number maps to the zero-based SES device slot number. This matches common direct-attached SES layouts such as `[1:0:0:0]` through `[1:0:23:0]` disks with an enclosure like `[1:0:24:0] enclosu ... /dev/sg25`, where `--dev-slot-num=0` lights physical bay 1.
 
 Basically it's a docker container, see the instalation part.
 
@@ -211,7 +215,7 @@ The container still needs:
 
 •	`--privileged`, because SES devices such as `/dev/sg25` may be root-only
 
-Inside the image, the web process cannot run arbitrary hardware commands. It can only use the read-only wrappers for inventory/SMART plus the LED identify wrapper for `sg_ses --set=ident` and `sg_ses --clear=ident`.
+Inside the image, the web process cannot run arbitrary hardware commands. It can only use the read-only wrappers for inventory/SMART plus the LED identify wrapper for `sg_ses --dev-slot-num=N --set=ident` and `sg_ses --dev-slot-num=N --clear=ident`.
 
 1. Open a TrueNAS shell or connect over SSH.
 

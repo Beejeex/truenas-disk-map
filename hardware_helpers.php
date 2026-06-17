@@ -74,10 +74,74 @@ function tdm_parse_lsscsi_enclosures($output)
     return $devices;
 }
 
-function tdm_detect_ses_devices(&$raw_output = '', &$exit_code = null)
+function tdm_parse_lsscsi_disks($output)
+{
+    $devices = array();
+
+    foreach (explode("\n", (string)$output) as $line)
+    {
+        $line = trim($line);
+        if ($line === '' || !preg_match('/^\[([^\]]+)\]\s+disk\s+(.+?)\s+(\/dev\/[A-Za-z0-9._-]+)\s+(\/dev\/sg\d+)\s*$/i', $line, $m))
+        {
+            continue;
+        }
+
+        $hctl = trim($m[1]);
+        $parts = explode(':', $hctl);
+
+        $devices[] = array(
+            'index' => count($devices),
+            'hctl' => $hctl,
+            'host' => isset($parts[0]) ? (int)$parts[0] : null,
+            'channel' => isset($parts[1]) ? (int)$parts[1] : null,
+            'target' => isset($parts[2]) ? (int)$parts[2] : null,
+            'lun' => isset($parts[3]) ? (int)$parts[3] : null,
+            'name' => preg_replace('/\s+/', ' ', trim($m[2])),
+            'dev' => trim($m[3]),
+            'sg' => trim($m[4]),
+            'raw' => $line,
+        );
+    }
+
+    usort($devices, function ($a, $b) {
+        $ah = $a['host'] ?? 0;
+        $bh = $b['host'] ?? 0;
+        if ($ah !== $bh) return $ah <=> $bh;
+
+        $ac = $a['channel'] ?? 0;
+        $bc = $b['channel'] ?? 0;
+        if ($ac !== $bc) return $ac <=> $bc;
+
+        $at = $a['target'] ?? 0;
+        $bt = $b['target'] ?? 0;
+        if ($at !== $bt) return $at <=> $bt;
+
+        return strcmp($a['dev'], $b['dev']);
+    });
+
+    foreach ($devices as $i => &$device)
+    {
+        $device['index'] = $i;
+    }
+    unset($device);
+
+    return $devices;
+}
+
+function tdm_detect_lsscsi(&$raw_output = '', &$exit_code = null)
 {
     $raw_output = tdm_run_command(array('sudo', '/usr/local/sbin/tdm-lsscsi-read'), $exit_code);
-    return tdm_parse_lsscsi_enclosures($raw_output);
+
+    return array(
+        'disks' => tdm_parse_lsscsi_disks($raw_output),
+        'enclosures' => tdm_parse_lsscsi_enclosures($raw_output),
+    );
+}
+
+function tdm_detect_ses_devices(&$raw_output = '', &$exit_code = null)
+{
+    $detected = tdm_detect_lsscsi($raw_output, $exit_code);
+    return $detected['enclosures'];
 }
 
 function tdm_is_safe_sg_device($device)
@@ -88,6 +152,37 @@ function tdm_is_safe_sg_device($device)
 function tdm_is_safe_dev_path($device)
 {
     return is_string($device) && preg_match('/^\/dev\/[A-Za-z0-9._-]+$/', $device);
+}
+
+function tdm_get_smart_serial($dev, $device_type = '')
+{
+    if (!tdm_is_safe_dev_path($dev))
+    {
+        return '';
+    }
+
+    $device_type = trim((string)$device_type);
+    $code = 0;
+    if ($device_type !== '' && preg_match('/^[A-Za-z0-9,+_-]+$/', $device_type))
+    {
+        $info = tdm_run_command(array('sudo', '/usr/local/sbin/tdm-smartctl-read', '-i', '-d', $device_type, $dev), $code);
+    }
+    else
+    {
+        $info = tdm_run_command(array('sudo', '/usr/local/sbin/tdm-smartctl-read', '-i', $dev), $code);
+    }
+
+    if (preg_match('/Serial Number:\s*(.+)/i', $info, $m))
+    {
+        return trim($m[1]);
+    }
+
+    if (preg_match('/Serial number:\s*(.+)/i', $info, $m))
+    {
+        return trim($m[1]);
+    }
+
+    return '';
 }
 
 function tdm_build_sg_ses_command($ses_device, $slot, $action)
@@ -128,7 +223,7 @@ function tdm_parse_sg_ses_command($cmd)
         );
     }
 
-    $legacy_pattern = '/^(?:sudo\s+)?(?:\/usr\/(?:local\/)?bin\/)?sg_ses\s+--index=(\d+)\s+--(set|clear)=ident\s+(\/dev\/sg\d+)$/';
+    $legacy_pattern = '/^(?:sudo\s+)?(?:\/usr\/(?:local\/)?bin\/)?sg_ses\s+--(?:dev-slot-num|index)=(\d+)\s+--(set|clear)=ident\s+(\/dev\/sg\d+)$/';
     if (!preg_match($legacy_pattern, $cmd, $m))
     {
         return null;
