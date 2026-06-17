@@ -17,6 +17,68 @@ function human_time_diff($secs){
     return $days . 'd ' . ($hrs%24) . 'h';
 }
 
+function tdm_js($value)
+{
+    $json = json_encode($value, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
+    return htmlspecialchars($json === false ? 'null' : $json, ENT_QUOTES, 'UTF-8');
+}
+
+function tdm_ses_meta_from_parts(array $parts)
+{
+    return array(
+        'model' => isset($parts[7]) ? trim($parts[7]) : '',
+        'capacity' => isset($parts[8]) ? trim($parts[8]) : '',
+        'firmware' => isset($parts[9]) ? trim($parts[9]) : '',
+        'power_hours' => isset($parts[10]) ? (int)$parts[10] : 0,
+        'temperature_c' => isset($parts[11]) ? trim($parts[11]) : '',
+        'reallocated' => isset($parts[12]) ? (int)$parts[12] : 0,
+        'pending' => isset($parts[13]) ? (int)$parts[13] : 0,
+        'uncorrectable' => isset($parts[14]) ? (int)$parts[14] : 0,
+        'crc_errors' => isset($parts[15]) ? (int)$parts[15] : 0,
+        'ata_errors' => isset($parts[16]) ? (int)$parts[16] : 0,
+        'load_cycle_count' => isset($parts[17]) ? (int)$parts[17] : 0,
+    );
+}
+
+function tdm_hours_label($hours)
+{
+    $hours = (int)$hours;
+    if ($hours <= 0) return '';
+    return number_format($hours) . 'h';
+}
+
+function tdm_disk_meta_summary(array $meta)
+{
+    $bits = array();
+    if ($meta['model'] !== '') $bits[] = $meta['model'];
+    if ($meta['capacity'] !== '') $bits[] = $meta['capacity'];
+    if ((int)$meta['power_hours'] > 0) $bits[] = tdm_hours_label($meta['power_hours']);
+    return implode(' | ', $bits);
+}
+
+function tdm_disk_counter_summary(array $meta)
+{
+    $bits = array(
+        'R=' . (int)$meta['reallocated'],
+        'P=' . (int)$meta['pending'],
+        'U=' . (int)$meta['uncorrectable'],
+        'CRC=' . (int)$meta['crc_errors'],
+        'ATA=' . (int)$meta['ata_errors'],
+    );
+
+    if ((int)$meta['load_cycle_count'] > 0)
+    {
+        $bits[] = 'Load=' . number_format((int)$meta['load_cycle_count']);
+    }
+
+    if ($meta['temperature_c'] !== '')
+    {
+        $bits[] = 'Temp=' . (int)$meta['temperature_c'] . 'C';
+    }
+
+    return implode(' / ', $bits);
+}
+
 
 
 // ======================== ÎNCĂRCARE DISCURi NEFOLOSITE ========================
@@ -181,14 +243,15 @@ foreach ($files as $file)
         if (count($parts) < 7) continue;
 
         list($serial, $device, $locatie, $slot, $smart, $cmd_on, $cmd_off) = $parts;
+        $meta = tdm_ses_meta_from_parts($parts);
 
         if ($title === null) $title = trim($locatie);
 
         // ===== CLASĂ DIN SMART (adăugat SPARE) =====
         $class = "smart-ok";
-		if (stripos($smart, "DEAD") !== false || stripos($smart, "DANGEROUS") !== false || stripos($smart, "MORT") !== false || stripos($smart, "PERICULOS") !== false) {
+        if (stripos($smart, "DEAD") !== false || stripos($smart, "DANGEROUS") !== false || stripos($smart, "MORT") !== false || stripos($smart, "PERICULOS") !== false) {
 			$class = "smart-bad";
-		} elseif (stripos($smart, "SUSPECT") !== false || stripos($smart, "TIRED") !== false || stripos($smart, "OBOSIT") !== false) {
+		} elseif (stripos($smart, "SUSPECT") !== false || stripos($smart, "WARNING") !== false || stripos($smart, "UNKNOWN") !== false || trim($smart) === "X" || stripos($smart, "TIRED") !== false || stripos($smart, "OBOSIT") !== false) {
 			$class = "smart-warn";
 		} elseif (stripos($smart, "SPARE") !== false) {
 			$class = "smart-spare";
@@ -206,6 +269,7 @@ foreach ($files as $file)
             'class'  => $class,
             'cmd_on' => trim($cmd_on),
             'cmd_off'=> trim($cmd_off),
+            'meta'   => $meta,
         ];
     }
 
@@ -381,9 +445,11 @@ foreach ($files as $file)
 /* tipografie (poți rămâne cu ale tale) */
 .slot-label{ font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef; }
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.meta-label{ font-size:11px; color:#9aa6b2; margin:1px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 .panel-c1 .slot-label{ font-size:14px; letter-spacing:.6px; }
 .panel-c1 .name-label{ font-size:13px; }
+.panel-c1 .meta-label{ display:none; }
 
 
 /* LED – rămâne neschimbat (nu-l rotim acum) */
@@ -402,6 +468,13 @@ foreach ($files as $file)
 /* hover fără transform – ca să nu stricăm pozițiile */
 .hdd-tile:hover{ outline-color: rgba(255,255,255,.12); }
 
+.detail-grid{
+  display:grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap:6px 12px;
+}
+.detail-grid strong{ color:#f0f3f7; }
+.detail-grid span{ min-width:0; overflow-wrap:anywhere; }
 
 </style>
 </head>
@@ -579,16 +652,23 @@ foreach ($files as $file)
                 $info = $panel['tiles'][$slotnum];
             }
 
-            $device  = $has ? htmlspecialchars($info['device']) : 'Empty';
-            $serial  = $has ? htmlspecialchars($info['serial']) : '';
-            $smart   = $has ? htmlspecialchars($info['smart'])  : '';
+            $device_raw = $has ? $info['device'] : 'Empty';
+            $serial_raw = $has ? $info['serial'] : '';
+            $smart_raw  = $has ? $info['smart'] : '';
+            $meta       = $has ? $info['meta'] : tdm_ses_meta_from_parts(array());
+
+            $device  = htmlspecialchars($device_raw);
+            $serial  = htmlspecialchars($serial_raw);
+            $smart   = htmlspecialchars($smart_raw);
             $cls     = $has ? $info['class'] : '';
             $cmd_on  = $has ? $info['cmd_on'] : '';
             $cmd_off = $has ? $info['cmd_off'] : '';
+            $meta_summary = $has ? tdm_disk_meta_summary($meta) : '';
+            $counter_summary = $has ? tdm_disk_counter_summary($meta) : '';
 
 
 			// === mapare device -> 'sda' etc. pt comparatie cu pool-urile ===
-			$dev_short = $device;
+			$dev_short = $device_raw;
 			
 			if ($dev_short !== '') {
 				// scoate prefixul /dev/ daca exista
@@ -684,18 +764,22 @@ foreach ($files as $file)
         <div class="<?php echo $tileCls; ?>"
              data-slot="<?php echo $slotnum; ?>"
 			 data-device="<?php echo htmlspecialchars($dev_short); ?>"
-			 data-serial="<?php echo htmlspecialchars($serial); ?>" 
+			 data-serial="<?php echo htmlspecialchars($serial_raw); ?>"
+             data-model="<?php echo htmlspecialchars($meta['model']); ?>"
+             data-capacity="<?php echo htmlspecialchars($meta['capacity']); ?>"
 			 data-pool="<?php echo htmlspecialchars($pool_name); ?>"
              onclick="openDriveModal(
-			  <?php echo $slotnum; ?>,
-			  '<?php echo htmlspecialchars(addslashes($device)); ?>',
-			  '<?php echo htmlspecialchars(addslashes($serial)); ?>',
-			  '<?php echo htmlspecialchars(addslashes($smart)); ?>',
-			  '<?php echo htmlspecialchars(addslashes($has ? $info['locatie'] : '')); ?>',
-			  '<?php echo htmlspecialchars(addslashes($cmd_on)); ?>',
-			  '<?php echo htmlspecialchars(addslashes($cmd_off)); ?>',
-			  '<?php echo htmlspecialchars(addslashes($pool_name)); ?>',
-			  <?php echo $is_spare ? 'true' : 'false'; ?>
+			  <?php echo (int)$slotnum; ?>,
+			  <?php echo tdm_js($device_raw); ?>,
+			  <?php echo tdm_js($serial_raw); ?>,
+			  <?php echo tdm_js($smart_raw); ?>,
+			  <?php echo tdm_js($has ? $info['locatie'] : ''); ?>,
+			  <?php echo tdm_js($cmd_on); ?>,
+			  <?php echo tdm_js($cmd_off); ?>,
+			  <?php echo tdm_js($pool_name); ?>,
+			  <?php echo $is_spare ? 'true' : 'false'; ?>,
+              <?php echo tdm_js($meta); ?>,
+              <?php echo tdm_js($counter_summary); ?>
 			)"
 			>
           <div class="hdd-content">
@@ -703,6 +787,9 @@ foreach ($files as $file)
             <div class="hdd-overlay">
               <p class="slot-label"><?php echo $slotLabelHtml; ?></p>
               <p class="name-label"><?php echo $labelText; ?></p>
+              <?php if ($meta_summary !== ''): ?>
+                <p class="meta-label"><?php echo htmlspecialchars($meta_summary); ?></p>
+              <?php endif; ?>
             </div>
           </div>
         </div>
@@ -771,7 +858,6 @@ foreach ($files as $file)
         <li><?php echo tdm_h('smart.criteria.pending'); ?></li>
         <li><?php echo tdm_h('smart.criteria.uncorrectable'); ?></li>
         <li><?php echo tdm_h('smart.criteria.reallocated_danger'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
       </ul>
     </li>
 
@@ -789,6 +875,7 @@ foreach ($files as $file)
         <li><?php echo tdm_h('smart.criteria.read_fail'); ?></li>
         <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
         <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
+        <li><?php echo tdm_h('smart.criteria.crc_errors'); ?></li>
       </ul>
     </li>
   </ul>
@@ -847,9 +934,31 @@ foreach ($files as $file)
   </span>
 </div>
 
-<div><strong><?php echo tdm_h('modal.disk_location'); ?></strong> <span id="mLocatieDisk" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span></div>
-<div><strong><?php echo tdm_h('modal.state'); ?></strong> <span id="mSmart" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span></div>
-<div><strong><?php echo tdm_h('modal.pool'); ?></strong> <span id="mPool" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span></div>
+<div class="detail-grid mt-2">
+  <strong><?php echo tdm_h('modal.model'); ?></strong>
+  <span id="mModel" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.capacity'); ?></strong>
+  <span id="mCapacity" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.power_hours'); ?></strong>
+  <span id="mPowerHours" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.temperature'); ?></strong>
+  <span id="mTemperature" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.disk_location'); ?></strong>
+  <span id="mLocatieDisk" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.state'); ?></strong>
+  <span id="mSmart" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>"></span>
+
+  <strong><?php echo tdm_h('modal.counters'); ?></strong>
+  <span id="mCounters" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+
+  <strong><?php echo tdm_h('modal.pool'); ?></strong>
+  <span id="mPool" class="copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">—</span>
+</div>
 
       </div>
 
@@ -1018,7 +1127,8 @@ function tdmMsg(key, vars) {
   return text;
 }
 
-function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare) {
+function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters) {
+  meta = meta || {};
   var nameWithSerial = name || 'Empty';
   if (serial) nameWithSerial += ' [ ' + serial + ' ]';
 
@@ -1026,6 +1136,11 @@ function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolN
   document.getElementById('mSlot').textContent  = '#' + slot;
   document.getElementById('mLocatieDisk').textContent = locatie || '—';
   document.getElementById('mSmart').textContent = smart || '—';
+  document.getElementById('mModel').textContent = meta.model || '—';
+  document.getElementById('mCapacity').textContent = meta.capacity || '—';
+  document.getElementById('mPowerHours').textContent = meta.power_hours ? Number(meta.power_hours).toLocaleString() + 'h' : '—';
+  document.getElementById('mTemperature').textContent = meta.temperature_c ? meta.temperature_c + 'C' : '—';
+  document.getElementById('mCounters').textContent = counters || '—';
 
   // Pool
   var poolText = poolName || '—';
@@ -1140,6 +1255,8 @@ $(function(){
   function tileMatches(t, terms, selectedPool){
     var dev  = (t.getAttribute('data-device') || '').toLowerCase();
     var ser  = (t.getAttribute('data-serial') || '').toLowerCase();
+    var model = (t.getAttribute('data-model') || '').toLowerCase();
+    var capacity = (t.getAttribute('data-capacity') || '').toLowerCase();
     var pool = (t.getAttribute('data-pool')   || '').toLowerCase();
 
     // OR pe termeni (sau niciun termen => match)
@@ -1149,7 +1266,9 @@ $(function(){
       for (var i=0;i<terms.length;i++){
         var term = terms[i];
         if ((dev && dev.indexOf(term) !== -1) ||
-            (ser && ser.indexOf(term) !== -1)) {
+            (ser && ser.indexOf(term) !== -1) ||
+            (model && model.indexOf(term) !== -1) ||
+            (capacity && capacity.indexOf(term) !== -1)) {
           searchMatch = true; break;
         }
       }

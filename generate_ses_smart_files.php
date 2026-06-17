@@ -37,133 +37,229 @@ function get_device_by_serial($serial, $cache_file = "serial_cache.txt")
     return "N/A";
 }
 
-function get_smart_status($dev)
+function tdm_clean_ses_field($value)
 {
+    $value = preg_replace('/[\r\n|]+/', ' ', (string)$value);
+    return trim(preg_replace('/\s+/', ' ', $value));
+}
+
+function tdm_smart_attr_raw($line, $id, $name)
+{
+    $pattern = '/^' . preg_quote((string)$id, '/') . '\s+' . preg_quote($name, '/') . '\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(.+)$/';
+    if (preg_match($pattern, trim($line), $m))
+    {
+        if (preg_match('/-?\d+/', $m[1], $raw))
+        {
+            return (int)$raw[0];
+        }
+    }
+
+    if (preg_match_all('/-?\d+/', trim($line), $nums) && !empty($nums[0]))
+    {
+        $matches = $nums[0];
+        return (int)$matches[count($matches) - 1];
+    }
+
+    return 0;
+}
+
+function tdm_format_smart_status($state, array $d)
+{
+    $bits = array(
+        "Overall=" . ($d['overall_health'] !== '' ? $d['overall_health'] : 'UNKNOWN'),
+        "Realloc=" . $d['reallocated'],
+        "Pending=" . $d['pending'],
+        "Uncorrect=" . $d['uncorrectable'],
+        "CRC=" . $d['crc_errors'],
+        "ATA_Errors=" . $d['ata_errors'],
+    );
+
+    if ($d['selftest_failed'])
+    {
+        $bits[] = "SelfTestFail=YES";
+    }
+
+    if ($d['read_failure'])
+    {
+        $bits[] = "ReadFail=YES";
+    }
+
+    return $state . " (" . implode(" / ", $bits) . ")";
+}
+
+function get_smart_report($dev)
+{
+    $details = array(
+        'model' => '',
+        'capacity' => '',
+        'firmware' => '',
+        'power_hours' => 0,
+        'temperature_c' => '',
+        'reallocated' => 0,
+        'pending' => 0,
+        'uncorrectable' => 0,
+        'crc_errors' => 0,
+        'ata_errors' => 0,
+        'load_cycle_count' => 0,
+        'overall_health' => '',
+        'selftest_failed' => false,
+        'read_failure' => false,
+    );
+
     if ($dev === "N/A")
     {
-        return "X";
+        return array('status' => "UNKNOWN (device not mapped)", 'details' => $details);
     }
 
     if (!tdm_is_safe_dev_path($dev))
     {
-        return "X";
+        return array('status' => "UNKNOWN (invalid device path)", 'details' => $details);
     }
 
     $code = 0;
     $smart = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-x", $dev), $code);
     if (trim($smart) === "")
     {
-        return "X";
+        return array('status' => "UNKNOWN (smartctl returned no data)", 'details' => $details);
     }
 
-    // Variabile
-    $realloc = 0;
-    $pending = 0;
-    $uncorrect = 0;
-    $load = 0;
-    $hours = 0;
-    $crc = 0;
-    $ata_errors = 0; // Poate lipsi pe unele modele
-    $selftest_fail = false;
-    $read_fail = false;
-    $overall_passed = true;
+    if (preg_match('/^(?:Device Model|Model Number):\s*(.+)$/mi', $smart, $m))
+    {
+        $details['model'] = tdm_clean_ses_field($m[1]);
+    }
+    elseif (preg_match('/^Product:\s*(.+)$/mi', $smart, $m))
+    {
+        $details['model'] = tdm_clean_ses_field($m[1]);
+    }
+
+    if (preg_match('/^Firmware Version:\s*(.+)$/mi', $smart, $m))
+    {
+        $details['firmware'] = tdm_clean_ses_field($m[1]);
+    }
+
+    if (preg_match('/^User Capacity:\s*.*?\[([^\]]+)\]/mi', $smart, $m))
+    {
+        $details['capacity'] = tdm_clean_ses_field($m[1]);
+    }
+    elseif (preg_match('/^User Capacity:\s*(.+)$/mi', $smart, $m))
+    {
+        $details['capacity'] = tdm_clean_ses_field($m[1]);
+    }
 
     // Parse atribute SMART clasice
     foreach (explode("\n", $smart) as $line)
     {
         $line = trim($line);
 
-        if (preg_match('/^5\s+Reallocated_Sector_Ct\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        if (preg_match('/^5\s+Reallocated_Sector_Ct\b/i', $line))
         {
-            $realloc = (int)$m[1];
+            $details['reallocated'] = tdm_smart_attr_raw($line, 5, 'Reallocated_Sector_Ct');
         }
-        elseif (preg_match('/^197\s+Current_Pending_Sector\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        elseif (preg_match('/^197\s+Current_Pending_Sector\b/i', $line))
         {
-            $pending = (int)$m[1];
+            $details['pending'] = tdm_smart_attr_raw($line, 197, 'Current_Pending_Sector');
         }
-        elseif (preg_match('/^198\s+Offline_Uncorrectable\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        elseif (preg_match('/^198\s+Offline_Uncorrectable\b/i', $line))
         {
-            $uncorrect = (int)$m[1];
+            $details['uncorrectable'] = tdm_smart_attr_raw($line, 198, 'Offline_Uncorrectable');
         }
-        elseif (preg_match('/^193\s+Load_Cycle_Count\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        elseif (preg_match('/^193\s+Load_Cycle_Count\b/i', $line))
         {
-            $load = (int)$m[1];
+            $details['load_cycle_count'] = tdm_smart_attr_raw($line, 193, 'Load_Cycle_Count');
         }
-        elseif (preg_match('/^9\s+Power_On_Hours\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        elseif (preg_match('/^9\s+Power_On_Hours\b/i', $line))
         {
-            $hours = (int)$m[1];
+            $details['power_hours'] = tdm_smart_attr_raw($line, 9, 'Power_On_Hours');
         }
-        elseif (preg_match('/^199\s+UDMA_CRC_Error_Count\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)/', $line, $m))
+        elseif (preg_match('/^199\s+UDMA_CRC_Error_Count\b/i', $line))
         {
-            $crc = (int)$m[1];
+            $details['crc_errors'] = tdm_smart_attr_raw($line, 199, 'UDMA_CRC_Error_Count');
         }
+        elseif (preg_match('/^(190|194)\s+\S*Temperature\S*\b.*?\s+(-|\w+)\s+(.+)$/i', $line, $m))
+        {
+            if ($details['temperature_c'] === '' && preg_match('/(-?\d+)/', $m[3], $tm))
+            {
+                $details['temperature_c'] = (string)(int)$tm[1];
+            }
+        }
+    }
+
+    if ($details['power_hours'] === 0 && preg_match('/^Power On Hours:\s*([\d,]+)/mi', $smart, $m))
+    {
+        $details['power_hours'] = (int)str_replace(',', '', $m[1]);
+    }
+
+    if ($details['temperature_c'] === '' && preg_match('/Current Drive Temperature:\s*(\d+)\s*C/i', $smart, $m))
+    {
+        $details['temperature_c'] = (string)(int)$m[1];
     }
 
     // Overall health
     if (preg_match('/SMART overall-health .*?:\s*(\S+)/i', $smart, $m))
     {
-        if (strtoupper($m[1]) !== 'PASSED')
-        {
-            $overall_passed = false;
-        }
+        $details['overall_health'] = strtoupper($m[1]);
+    }
+    elseif (preg_match('/SMART Health Status:\s*(\S+)/i', $smart, $m))
+    {
+        $details['overall_health'] = strtoupper($m[1]);
     }
 
     // Self-test failures (diverse mesaje posibile)
     if (preg_match('/Completed:\s*(read|electrical|servo|unknown)\s+failure/i', $smart))
     {
-        $selftest_fail = true;
+        $details['selftest_failed'] = true;
     }
 
     // Read failure in self-test (string util cand long test pica pe citire)
     if (preg_match('/Completed:\s*read failure/i', $smart))
     {
-        $read_fail = true;
+        $details['read_failure'] = true;
     }
 
     // ATA Error Count (nu toate modelele il au)
     if (preg_match('/ATA\s+Error\s+Count:\s*(\d+)/i', $smart, $m))
     {
-        $ata_errors = (int)$m[1];
+        $details['ata_errors'] = (int)$m[1];
     }
     else
     {
         // Daca log-ul zice "No Errors Logged", consideram 0
         if (preg_match('/SMART\s+Error\s+Log.*?\n\s*No\s+Errors\s+Logged/i', $smart))
         {
-            $ata_errors = 0;
+            $details['ata_errors'] = 0;
         }
     }
 
+    $overall_passed = ($details['overall_health'] === '' || $details['overall_health'] === 'PASSED' || $details['overall_health'] === 'OK');
+
     // ORDONARE SEVERITATI:
     // 1) DEAD: SMART not passed, self-test failure, or severe combinations
-    if (!$overall_passed || $selftest_fail || ($pending > 0 && $uncorrect > 0) || $realloc >= 100)
+    if (!$overall_passed || $details['selftest_failed'] || ($details['pending'] > 0 && $details['uncorrectable'] > 0) || $details['reallocated'] >= 100)
     {
-        return "DEAD (Overall=" . ($overall_passed ? "PASSED" : "FAILED") .
-               " / SelfTestFail=" . ($selftest_fail ? "YES" : "NO") .
-               " / Realloc=$realloc / Pending=$pending / Uncorrect=$uncorrect / CRC=$crc / ATA_Errors=$ata_errors)";
+        return array('status' => tdm_format_smart_status("DEAD", $details), 'details' => $details);
     }
 
     // 2) DANGEROUS: clear risk signals
-    if ($pending > 0 || $uncorrect > 0 || $realloc > 10 || $crc > 0 || $ata_errors > 0)
+    if ($details['pending'] > 0 || $details['uncorrectable'] > 0 || $details['reallocated'] > 10)
     {
-        return "DANGEROUS (Realloc=$realloc / Pending=$pending / Uncorrect=$uncorrect / CRC=$crc / ATA_Errors=$ata_errors)";
+        return array('status' => tdm_format_smart_status("DANGEROUS", $details), 'details' => $details);
     }
 
-	// 3) TIRED: many load/unload cycles or light wear
-	if ($load > 20000 || ($realloc > 0 && $realloc <= 10))
-	{
-		return "TIRED (Realloc=$realloc / Load=$load)";
-	}
-
-
-    // 4) SUSPECT: semnale mai slabe, dar de urmarit
-    if ($read_fail || $realloc > 0 || $ata_errors > 0)
+    // 3) SUSPECT: non-critical counters that should be reviewed.
+    // Load_Cycle_Count is shown as info only; it is too noisy to mark a disk bad by itself.
+    if ($details['read_failure'] || $details['reallocated'] > 0 || $details['ata_errors'] > 0 || $details['crc_errors'] > 0)
     {
-        return "SUSPECT (Realloc=$realloc / ATA_Errors=$ata_errors / ReadFail=" . ($read_fail ? "YES" : "NO") . ")";
+        return array('status' => tdm_format_smart_status("SUSPECT", $details), 'details' => $details);
     }
 
-    // 5) OK
-    return "OK";
+    // 4) OK
+    return array('status' => tdm_format_smart_status("OK", $details), 'details' => $details);
+}
+
+function get_smart_status($dev)
+{
+    $report = get_smart_report($dev);
+    return $report['status'];
 }
 
 
@@ -280,7 +376,9 @@ foreach ($source_files as $file)
         {
             list($serial, $enclosure, $slot, $row_ctrl) = $row;
             $device = get_device_by_serial($serial);
-            $smart_status = get_smart_status($device);
+            $smart_report = get_smart_report($device);
+            $smart_status = $smart_report['status'];
+            $smart_details = $smart_report['details'];
 
             $cmd_on = "";
             $cmd_off = "";
@@ -290,7 +388,29 @@ foreach ($source_files as $file)
                 $cmd_off = tdm_build_sg_ses_command($ses_device['sg'], $slot, "clear");
             }
 
-            fwrite($out, "$serial|$device|$label|$slot|$smart_status|$cmd_on|$cmd_off\n");
+            $fields = array(
+                $serial,
+                $device,
+                $label,
+                $slot,
+                $smart_status,
+                $cmd_on,
+                $cmd_off,
+                $smart_details['model'],
+                $smart_details['capacity'],
+                $smart_details['firmware'],
+                $smart_details['power_hours'],
+                $smart_details['temperature_c'],
+                $smart_details['reallocated'],
+                $smart_details['pending'],
+                $smart_details['uncorrectable'],
+                $smart_details['crc_errors'],
+                $smart_details['ata_errors'],
+                $smart_details['load_cycle_count'],
+            );
+
+            $fields = array_map('tdm_clean_ses_field', $fields);
+            fwrite($out, implode("|", $fields) . "\n");
         }
 
         fclose($out);
