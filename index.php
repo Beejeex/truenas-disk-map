@@ -127,17 +127,17 @@ function tdm_disk_counter_summary(array $meta)
 
 
 
-// ======================== ÎNCĂRCARE DISCURi NEFOLOSITE ========================
+// ======================== LOAD UNUSED DISKS ========================
 $unused_by_disk = array(); // ex: 'sdah' => true
 
-$unused_file = __DIR__ . "/hdd_controlere/disk_unused_no_pool.txt";
+$unused_file = __DIR__ . "/disk_data/disk_unused_no_pool.txt";
 if (is_file($unused_file)) {
     $lines_unused = file($unused_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if (is_array($lines_unused)) {
         foreach ($lines_unused as $u) {
             $u = trim($u);
             if ($u !== '') {
-                // păstrăm fără /dev/, în fișier ele sunt doar "sdX"
+                // Store disk names without /dev/; the file contains values such as "sdX".
                 $unused_by_disk[$u] = true;
             }
         }
@@ -161,7 +161,7 @@ function cols_for_file($filepath)
     return 4;
 }
 
-// —— c_0: „pe coloane”, rândul de sus are numerele mari
+// c_0: display by columns, with higher slot numbers on the top row.
 function build_display_order_colwise_top_high($totalSlots, $cols)
 {
     if ($totalSlots < 1) return [];
@@ -176,7 +176,7 @@ function build_display_order_colwise_top_high($totalSlots, $cols)
     return $order;
 }
 
-// —— c_1: „pe rânduri” invers (sus sunt ultimele blocuri), stânga→dreapta în fiecare rând
+// c_1: reversed row-wise display, left to right within each row.
 function build_display_order_rowwise_reversed($totalSlots, $cols)
 {
     if ($totalSlots < 1) return [];
@@ -192,11 +192,11 @@ function build_display_order_rowwise_reversed($totalSlots, $cols)
     return $order;
 }
 
-// ======= INFO ACTUALIZARE FISIERE hdd_controlere =======
-$hc_dir = __DIR__ . '/hdd_controlere';
-$all_hc_files = glob($hc_dir . '/*');  // include *_ses + txt-uri
-$latest_mtime = 0;                     // cel mai recent
-$oldest_mtime = PHP_INT_MAX;           // cel mai vechi
+// ======= DISK DATA FILE UPDATE INFO =======
+$hc_dir = __DIR__ . '/disk_data';
+$all_hc_files = glob($hc_dir . '/*');
+$latest_mtime = 0;
+$oldest_mtime = PHP_INT_MAX;
 $files_count  = 0;
 
 if ($all_hc_files) {
@@ -213,20 +213,20 @@ if ($all_hc_files) {
 }
 
 $now_ts   = time();
-$age_sec  = ($latest_mtime > 0) ? ($now_ts - $latest_mtime) : null; // de la cel mai recent
+$age_sec  = ($latest_mtime > 0) ? ($now_ts - $latest_mtime) : null;
 $age_text = ($age_sec !== null) ? human_time_diff($age_sec) : 'n/a';
 $latest_dt= ($latest_mtime > 0) ? date('Y-m-d H:i:s', $latest_mtime) : 'n/a';
 
-// prag alertă = 24h
+// Stale warning threshold: 24 hours.
 $is_stale = ($age_sec !== null && $age_sec > 24*3600);
 
 
-// ======================== ÎNCĂRCARE POOL-URI (procedural) ========================
+// ======================== LOAD POOLS ========================
 $pool_by_disk  = array();
 $spare_by_disk = array();
 $pool_names    = array();
 
-$pool_file = __DIR__ . "/hdd_controlere/disk_per_pool.txt";
+$pool_file = __DIR__ . "/disk_data/disk_per_pool.txt";
 if (is_file($pool_file)) {
     $raw = file_get_contents($pool_file);
     if ($raw !== false) {
@@ -236,7 +236,7 @@ if (is_file($pool_file)) {
                 if (is_array($data)) {
                     $pool_name = isset($data['name']) ? trim($data['name']) : '';
                     if ($pool_name !== '') {
-                        $pool_names[$pool_name] = true;              // ← ADĂUGAT
+                        $pool_names[$pool_name] = true;
                     }
                     if (isset($data['data_disks']) && is_array($data['data_disks'])) {
                         foreach ($data['data_disks'] as $d) {
@@ -257,7 +257,6 @@ if (is_file($pool_file)) {
 }
 
 
-// ... după ce ai populat $unused_by_disk ...
 if (!empty($unused_by_disk)) {
     $pool_names['UNUSED'] = true;
 }
@@ -267,8 +266,8 @@ sort($pool_options, SORT_NATURAL | SORT_FLAG_CASE);
 
 
 
-// ======================== ÎNCĂRCARE DATE PER FIȘIER ========================
-$files = glob("hdd_controlere/*_ses");
+// ======================== LOAD GENERATED SES FILES ========================
+$files = glob("disk_data/*_ses");
 $panels = [];
 
 foreach ($files as $file)
@@ -293,7 +292,7 @@ foreach ($files as $file)
 
         if ($title === null) $title = trim($locatie);
 
-        // ===== CLASĂ DIN SMART (adăugat SPARE) =====
+        // SMART-derived visual class, with SPARE override.
         $class = tdm_status_class($smart);
         if (stripos($smart, "SPARE") !== false) {
             $class = "smart-spare";
@@ -350,7 +349,7 @@ foreach ($files as $file)
 
 
 
-/* --- Legendă: buline independente (nu absolute) --- */
+/* Legend dots are inline elements, not positioned overlays. */
 .led-dot-legend{
   display:inline-block;
   width:12px;
@@ -360,7 +359,7 @@ foreach ($files as $file)
   vertical-align:middle;
 }
 
-/* Culori identice cu cele din grid */
+/* Colors match the grid status lights. */
 .led-dot-legend.smart-ok    { background:var(--status-ok); box-shadow:0 0 8px rgba(34,197,94,.8); }
 .led-dot-legend.smart-dead  { background:var(--status-dead); box-shadow:0 0 8px rgba(153,27,27,.85); }
 .led-dot-legend.smart-critical { background:var(--status-critical); box-shadow:0 0 8px rgba(239,68,68,.85); }
@@ -373,7 +372,7 @@ foreach ($files as $file)
 .led-dot-legend.empty       { background:#111;    box-shadow:inset 0 0 3px rgba(255,255,255,.2); }
 .led-dot-legend.smart-unused{ background:#2da8ff; box-shadow:0 0 10px rgba(45,168,255,.9); }
 
-/* Layout legendă */
+/* Legend layout */
 .legend-grid {
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -388,8 +387,8 @@ foreach ($files as $file)
 
 
 #regenSpinner.d-none { display: none !important; }
-#regenSpinner { pointer-events: none; } /* overlay-ul nu va bloca click-urile */
-#regenSpinner .text-center { pointer-events: auto; } /* dar textul/spinnerul le primește când e vizibil */
+#regenSpinner { pointer-events: none; }
+#regenSpinner .text-center { pointer-events: auto; }
 
 
 #driveModal .copyable { cursor: copy; }
@@ -402,18 +401,18 @@ foreach ($files as $file)
 
 
 
-/* implicit: arătăm scurt, ascundem complet */
+/* By default, show short pool names and hide full pool names. */
 .pool-full { display: none; }
 .pool-short { display: inline; }
 
-/* când body are clasa .show-full-pool, inversăm */
+/* When body has .show-full-pool, reverse the visibility. */
 .show-full-pool .pool-full { display: inline; }
 .show-full-pool .pool-short { display: none; }
 
 
 :root{
-  --c1-scale: calc(685 / 202);   /* ≈ 3.389 */
-  --c1-unscale: calc(202 / 685); /* ≈ 0.295 – inversul */
+  --c1-scale: calc(685 / 202);
+  --c1-unscale: calc(202 / 685);
   --bg: #1b1e23;
   --panel: #232730;
   --panel-2: #1f2330;
@@ -520,7 +519,7 @@ html.theme-light{
     gap:10px;
   }
 
-  /* Grid: fără înălțime fixă – tile-ul decide dimensiunea */
+  /* The tile aspect ratio controls row height. */
   .nas-grid { display: grid; grid-row-gap: 14px; grid-column-gap: 14px; }
   
   
@@ -534,21 +533,21 @@ html.theme-light{
   background-color:#2a2f3a;
 }
 
-/* --- C_1: cutie portret (grid 4×15) --- */
+/* --- C_1: portrait tile (4 x 15 grid) --- */
 .panel-c1 .hdd-tile{
   aspect-ratio: 202 / 685;        /* portrait box */
 }
 
-/* CONȚINUT – folosim ca holder pentru imagine + LED + overlay */
+/* Content holder for image, LED, and overlay. */
 .hdd-content{
   position:absolute; inset:0;
   background-position:center;
   background-repeat:no-repeat;
-  background-size: 100% 100%;     /* întinde exact pe cutie */
+  background-size: 100% 100%;
 }
 
 /* ====== IMAGINI ======
-   C_0 (orizontale) – rămân cele vechi
+   C_0 uses horizontal disk images.
 */
 .hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK.png'); }
 .hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
@@ -562,7 +561,7 @@ html.theme-light{
 .hdd-tile.smart-unused  .hdd-content{ background-image:url('src/img/HDD_UNUSED.png'); }
 
 
-/* C_1 (portret) – folosim imaginile NOI, deja ROTITE */
+/* C_1 uses pre-rotated portrait disk images. */
 .panel-c1 .hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK_rotated.png'); }
 .panel-c1 .hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
 .panel-c1 .hdd-tile.smart-danger .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
@@ -575,31 +574,31 @@ html.theme-light{
 .panel-c1 .hdd-tile.smart-unused .hdd-content{ background-image:url('src/img/HDD_UNUSED_rotated.png'); }
 
 
-/* ====== TEXT DOAR ROTIT ÎN C_1 ======
-   Rotim overlay-ul cu −90°, fără scale. Îl ancorăm jos-stânga.
+/* ====== ROTATED TEXT FOR C_1 ONLY ======
+   Rotate the overlay -90 degrees without scaling and anchor it near the lower-left edge.
 */
 .hdd-overlay{
   position:absolute; left:0; right:0; bottom:0; padding:8px 10px;
   background:linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0));
   text-shadow: 0 1px 2px rgba(0,0,0,.7);
-  z-index: 2;                 /* asigură-te că e peste imagine */
+  z-index: 2;
 }
 
 
 
 .panel-c1 .hdd-overlay{
-  /* fără fundal, îl poziționăm pe stânga pe mijloc */
+  /* No background; position it near the left middle. */
   background:none; padding:0;
   top:96%; left:45%; right:auto; bottom:auto;
 
-  /* pivot pe mijlocul stâng; îl rotim și apoi îl aducem în centru vertical */
+  /* Pivot from the left middle, rotate, then center vertically. */
   transform-origin: left center;
   transform: translateY(-50%) rotate(-90deg);
 
-  /* lăsăm lățimea pe auto ca să nu fie forțat la 100% */
+  /* Keep width automatic so it is not forced to 100%. */
   width:auto;
 }
-/* tipografie (poți rămâne cu ale tale) */
+/* Tile typography */
 .slot-label{ font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef; }
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meta-label{ font-size:11px; color:#9aa6b2; margin:1px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -609,7 +608,7 @@ html.theme-light{
 .panel-c1 .meta-label{ display:none; }
 
 
-/* LED – rămâne neschimbat (nu-l rotim acum) */
+/* LED position stays unrotated. */
 .led-dot{
   position:absolute; top:8px; right:8px;
   width:12px; height:12px; border-radius:50%;
@@ -674,7 +673,7 @@ html.theme-light{
 .panel-c1 .tile-led-toggle{ display:none; }
 
 
-/* hover fără transform – ca să nu stricăm pozițiile */
+/* Hover without transforms so internal positions stay stable. */
 .hdd-tile:hover{ outline-color: rgba(255,255,255,.12); }
 
 .detail-grid{
@@ -998,7 +997,7 @@ html.theme-light .btn-outline-secondary{
         $rows = (int)ceil($total / $cols);
     }
 
-    // ordHint (primele 5)
+    // Order hint, first five entries.
     $ordHint = '';
     if ($rows >= 1) {
         $parts = array();
@@ -1015,13 +1014,13 @@ html.theme-light .btn-outline-secondary{
         }
     }
 
-    // clasa pentru panou (fără ternar)
+    // Panel class.
     $panelClass = '';
     if ($ctrl === 1) {
         $panelClass = 'panel-c1';
     }
 
-    // minw (fără ternar)
+    // Minimum tile width.
     $minw = 140;
     if ($ctrl === 1) {
         $minw = 60;
@@ -1036,7 +1035,6 @@ html.theme-light .btn-outline-secondary{
           </div>
 
           <?php
-          // Dacă vrei să afișezi info de grid, folosește IF clasic:
           if ($rows >= 1) {
               echo '<small class="text-muted">';
               echo tdm_h('panel.grid_info', array(
@@ -1077,17 +1075,17 @@ html.theme-light .btn-outline-secondary{
             $status_class = tdm_status_slug($status_name);
 
 
-			// === mapare device -> 'sda' etc. pt comparatie cu pool-urile ===
+			// Map /dev/sdX to sdX for pool comparisons.
 			$dev_short = $device_raw;
 			
 			if ($dev_short !== '') {
-				// scoate prefixul /dev/ daca exista
+				// Remove /dev/ prefix when present.
 				if (strpos($dev_short, '/dev/') === 0) {
 					$dev_short = substr($dev_short, 5);
 				}
 			}
 
-			// === determinare pool & spare ===
+			// Determine pool and spare membership.
 			$pool_name = '';
 			if (isset($pool_by_disk[$dev_short])) {
 				$pool_name = $pool_by_disk[$dev_short];
@@ -1098,22 +1096,21 @@ html.theme-light .btn-outline-secondary{
 				$is_spare = true;
 				$spare_pool_name = $spare_by_disk[$dev_short];
 				if ($pool_name === '') {
-					$pool_name = $spare_pool_name; // dacă nu e în data_disks dar e în spare_disks, folosim numele din spares
+					$pool_name = $spare_pool_name;
 				}
 			}
 
-			// === dacă e SPARE, forțăm clasa vizuală smart-spare ===
-			// === UNUSED? (dacă apare în lista „unused”, ignorăm pool/spare) ===
+			// If the disk is unused, ignore pool/spare labels and use the unused class.
 			$is_unused = false;
 			if ($dev_short !== '' && isset($unused_by_disk[$dev_short])) {
 				$is_unused = true;
 				$pool_name = 'UNUSED';
-				$is_spare  = false; // nefolosit ≠ spare
+				$is_spare  = false;
 			}
 			
 
 
-			// === clasa vizuală finală ===
+			// Final visual class.
 			if ($is_unused) {
 				$cls = 'smart-unused';
 				$tileCls = 'hdd-tile smart-unused';
@@ -1129,7 +1126,7 @@ html.theme-light .btn-outline-secondary{
             }
 
 			
-			// --- short name (doar pentru pagina principală) ---
+			// Short pool name for the grid.
 			$pool_name_short = $pool_name;
 			if ($pool_name_short !== '') {
 				if (strlen($pool_name_short) > 5) {
@@ -1138,8 +1135,7 @@ html.theme-light .btn-outline-secondary{
 			}
 
 
-			// === label pentru Slot cu [pool] si - SPARE ===
-			// --- short name (doar pe pagină) ---
+			// Slot label with optional pool and SPARE tags.
 			$pool_name_short = $pool_name;
 			if ($pool_name_short !== '' && $pool_name_short !== 'UNUSED') {
 				if (strlen($pool_name_short) > 5) {
@@ -1147,7 +1143,6 @@ html.theme-light .btn-outline-secondary{
 				}
 			}
 
-			// --- label pentru Slot ---
 			$slotLabelHtml = 'Slot #' . (int)$slotnum;
 			if ($pool_name !== '') {
 				$slotLabelHtml .= ' ['
@@ -1158,7 +1153,7 @@ html.theme-light .btn-outline-secondary{
 			if ($is_spare) {
 				$slotLabelHtml .= ' - SPARE';
 			}
-            // text nume + serial
+            // Device and serial label.
             $labelText = $device;
             if ($serial !== '') {
                 $labelText .= ' [ ' . $serial . ' ]';
@@ -1487,7 +1482,7 @@ html.theme-light .btn-outline-secondary{
 
 
 
-<!-- Modal Reactualizare -->
+<!-- Refresh modal -->
 <div class="modal fade" id="regenModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
     <div class="modal-content" style="background:#1f2330;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
@@ -1698,14 +1693,14 @@ function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolN
   document.getElementById('btnOn').dataset.cmd  = cmdOn || '';
   document.getElementById('btnOff').dataset.cmd = cmdOff || '';
 
-  // 🔹 1) extragem device-ul (primul token din "name")
+  // Extract the device path from the first token in the display name.
   var devForSmart = (name || '').trim().split(/\s+/)[0] || '';
 
-  // 🔹 2) îl atașăm pe butonul SMART ca data-* (ca să-l avem la click)
+  // Store it on the SMART button for the click handler.
   var btnSmart = document.getElementById('btnSmart');
   if (btnSmart) btnSmart.dataset.device = devForSmart;
 
-  // 🔹 3) (opțional) setăm un titlu util în modalul SMART
+  // Set a helpful SMART modal title.
   var smartTitle = document.querySelector('#smartModal .modal-title');
   if (smartTitle) smartTitle.textContent = tdmMsg('smart.output.title') + ' - ' + (devForSmart || '?');
 
@@ -1735,7 +1730,7 @@ $(function(){
     opts = opts || {};
     if (!cmd) { alert(tdmMsg('js.no_led_command')); return; }
 
-    // ia butoanele DIN NOU în acest scope
+    // Resolve buttons in this scope.
     var btnOn  = document.getElementById('btnOn');
     var btnOff = document.getElementById('btnOff');
     var buttons = [btnOn, btnOff];
@@ -1784,7 +1779,7 @@ $(function(){
 
 <script>
 (function() {
-  // toggle nume pool (rămâne ca la tine)
+  // Toggle full pool names.
   var chk = document.getElementById('toggleShort');
   if (chk) {
     document.body.classList.remove('show-full-pool');
@@ -1794,7 +1789,7 @@ $(function(){
     });
   }
 
-  // ------ Căutare + filtrare după pool ------
+  // Search and pool filtering.
   var input   = document.getElementById('diskSearch');
   var btnClr  = document.getElementById('btnClearSearch');
   var selPool = document.getElementById('poolFilter');
@@ -1847,7 +1842,7 @@ $(function(){
       } else {
         t.classList.add('tile-hidden');
       }
-      // highlight doar când există termeni de căutare
+      // Highlight matches only when search terms are present.
       if (terms.length && hit) t.classList.add('tile-hit'); else t.classList.remove('tile-hit');
     });
   }
@@ -1874,7 +1869,7 @@ $(function(){
   var $btnReload = $('#regenReload');
 
   function hideSpinnerEnableButtons(){
-    $spinner.addClass('d-none');                 // << în loc de .hide()
+    $spinner.addClass('d-none');
     $btnClose.prop('disabled', false);
     $btnReload.prop('disabled', false);
   }
@@ -1882,7 +1877,7 @@ $(function(){
   function startRun(){
     // reset UI
     $out.text('');
-    $spinner.removeClass('d-none');              // << în loc de .show()
+    $spinner.removeClass('d-none');
     $btnClose.prop('disabled', true);
     $btnReload.prop('disabled', true);
 
@@ -1893,24 +1888,24 @@ $(function(){
       method: 'POST',
       data: { mode: 'cu_smart' },
       dataType: 'text',
-      cache: false,                               // evită caching
+      cache: false,
       timeout: 0
     })
     .done(function(resp){
       $out.text(resp || tdmMsg('js.no_output'));
 
-      // dacă a apărut marker-ul, ascundem imediat overlay-ul
-      if (/\=\=\=\s*(COMPLET|COMPLETE)\s*\=\=\=/.test(resp || '')) {
+      // Hide the overlay as soon as the completion marker appears.
+      if (/\=\=\=\s*COMPLETE\s*\=\=\=/.test(resp || '')) {
         $out.append("\n" + tdmMsg('js.completed'));
-        hideSpinnerEnableButtons();               // << AICI
+        hideSpinnerEnableButtons();
       }
     })
     .fail(function(xhr, status, err){
       $out.text(tdmMsg('js.refresh_error', {status: status}) + '\n' + (xhr.responseText || err || ''));
-      hideSpinnerEnableButtons();                 // arată butoanele la eroare
+      hideSpinnerEnableButtons();
     })
     .always(function(){
-      // fallback: dacă din orice motiv nu s-a ascuns deja, ascunde acum
+      // Fallback: hide the overlay if it is still visible.
       hideSpinnerEnableButtons();
       $out.scrollTop($out[0].scrollHeight);
     });
@@ -2031,31 +2026,31 @@ $(function(){
   $('#driveModal').on('shown.bs.modal', function(){
     var $m = $(this);
 
-    // dblclick pe wrapperul „Nume:” => copiază întregul
+    // Double-click the name wrapper to copy the full value.
     $m.find('#mNameFull').off('dblclick.copyFull').on('dblclick.copyFull', function(e){
-      // dacă a fost exact pe dev/serial, lăsăm celelalte handlere să decidă
+      // Let the device/serial handlers handle exact child targets.
       if ($(e.target).is('#mNameDev, #mNameSerial')) return;
       var full = $(this).attr('data-full') || '';
       copyToClipboard(full).then(function(){ showCopyHint(full); });
     });
 
-    // dblclick pe device => copiază doar „sde”
+    // Double-click the device to copy only "sde".
     $m.find('#mNameDev').off('dblclick.copyDev').on('dblclick.copyDev', function(){
       var v = shortDev($(this).text());
       if (!v) return;
       copyToClipboard(v).then(function(){ showCopyHint(v); });
     });
 
-    // dblclick pe serial => copiază serialul
+    // Double-click the serial to copy only the serial.
     $m.find('#mNameSerial').off('dblclick.copySer').on('dblclick.copySer', function(){
       var v = ($(this).text()||'').trim();
       if (!v || v==='-') return;
       copyToClipboard(v).then(function(){ showCopyHint(v); });
     });
 
-    // celelalte câmpuri rămân „copiabile” ca întreg
+    // Other copyable fields copy their full text.
     $m.find('.copyable').off('dblclick.copyGeneric').on('dblclick.copyGeneric', function(e){
-      // să nu suprascriem logica specială de mai sus
+      // Do not override the special handlers above.
       if (this.id==='mNameFull' || this.id==='mNameDev' || this.id==='mNameSerial') return;
       var v = ($(this).text()||'').trim();
       if (!v || v==='-') return;

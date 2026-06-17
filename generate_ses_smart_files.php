@@ -272,7 +272,7 @@ function get_smart_report($dev)
     }
     else
     {
-        // Daca log-ul zice "No Errors Logged", consideram 0
+        // If the log says "No Errors Logged", keep ATA errors at 0.
         if (preg_match('/SMART\s+Error\s+Log.*?\n\s*No\s+Errors\s+Logged/i', $smart))
         {
             $details['ata_errors'] = 0;
@@ -371,7 +371,7 @@ function get_smart_status($dev)
 
 
 
-$target_dir = __DIR__ . "/hdd_controlere";
+$target_dir = __DIR__ . "/disk_data";
 $warnings = array();
 $raw_lsscsi = "";
 $lsscsi_exit = 0;

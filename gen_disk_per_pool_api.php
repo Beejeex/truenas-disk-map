@@ -1,12 +1,9 @@
 <?php
-// gen_disk_per_pool_api.php
-// Preia pool-urile din TrueNAS prin API si scrie numele pool-ului, data_disks si spare_disks
-// in hdd_controlere/disk_per_pool.txt (JSON pretty).
+// Generate disk_data/disk_per_pool.txt with pool, data disk, and spare disk labels.
 
-// ====== CONFIG ======
 require_once __DIR__ . "/config_api.php";
 
-$target_dir = __DIR__ . "/hdd_controlere";
+$target_dir = __DIR__ . "/disk_data";
 $target_file = $target_dir . "/disk_per_pool.txt";
 
 if (!is_dir($target_dir))
@@ -24,7 +21,6 @@ if (!tdm_api_configured())
     return;
 }
 
-// ====== HELPER: apel API GET ======
 function truenas_api_get($url, $api_key, $verify_tls)
 {
     $ch = curl_init();
@@ -68,8 +64,7 @@ function truenas_api_get($url, $api_key, $verify_tls)
     return $resp;
 }
 
-// ====== MAIN ======
-// 1) Luam lista de pool-uri (include si topologia in mod normal)
+// Load pools. TrueNAS normally includes topology in the /pool response.
 $pools_json = truenas_api_get($API_URL . "/pool", $API_KEY, $VERIFY_TLS);
 $pools = json_decode($pools_json, true);
 
@@ -93,13 +88,13 @@ foreach ($pools as $pool)
     }
     else
     {
-        $pool_name = "(fara_nume)";
+        $pool_name = "(unnamed)";
     }
 
-    // In multe versiuni, topologia este in $pool["topology"]
+    // In many TrueNAS versions, topology is in $pool["topology"].
     if (isset($pool["topology"]) && is_array($pool["topology"]))
     {
-        // DATA: vdev-uri cu children->disk
+        // Data vdevs with children->disk entries.
         if (isset($pool["topology"]["data"]) && is_array($pool["topology"]["data"]))
         {
             foreach ($pool["topology"]["data"] as $vdev)
@@ -121,7 +116,7 @@ foreach ($pools as $pool)
             }
         }
 
-        // SPARE: uneori e "spare", alteori "spares" (defensiv)
+        // Some TrueNAS versions use "spare"; others use "spares".
         if (isset($pool["topology"]["spare"]) && is_array($pool["topology"]["spare"]))
         {
             foreach ($pool["topology"]["spare"] as $sp)
@@ -153,7 +148,6 @@ foreach ($pools as $pool)
         }
     }
 
-    // Unicizare + sortare, ca sa semene cu sort -u
     $data_disks = array_values(array_unique($data_disks));
     sort($data_disks, SORT_STRING);
 
@@ -167,7 +161,6 @@ foreach ($pools as $pool)
     );
 }
 
-// Scriem frumos (pretty JSON) in fisier
 $pretty = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 if ($pretty === false)
 {
@@ -182,4 +175,4 @@ if ($f === false)
 fwrite($f, $pretty . "\n");
 fclose($f);
 
-echo "Generat: " . $target_file . "\n";
+echo "[OK] Generated: " . $target_file . "\n";

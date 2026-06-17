@@ -8,7 +8,7 @@ if (is_file($controllers_file))
     $controllers = file($controllers_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 }
 
-$target_dir = __DIR__ . "/hdd_controlere";
+$target_dir = __DIR__ . "/disk_data";
 if (!is_dir($target_dir))
 {
     @mkdir($target_dir, 0775, true);
@@ -124,7 +124,7 @@ foreach ($controllers as $ctl)
     $enclosure = "";
     $slot = "";
     $serial = "";
-    $is_hdd = false; // Flag pentru validare hard disk
+    $is_hdd = false;
 
     $file = fopen($target_dir . "/hdd_c_$ctl", "w");
     if ($file === false)
@@ -143,7 +143,7 @@ foreach ($controllers as $ctl)
         }
         elseif (preg_match('/Device is a /i', $line)) 
         {
-            // Dacă apare alt "Device is a ..." flag-ul
+            // Reset the flag when sas3ircu starts describing a non-disk device.
             $is_hdd = false;
         }
 
@@ -159,13 +159,12 @@ foreach ($controllers as $ctl)
         {
             $serial = $m[1];
 
-            // scriem doar daca este HDD
+            // Write only disk rows.
             if ($is_hdd && $enclosure !== "" && $slot !== "" && $serial !== "")
             {
                 fwrite($file, "$serial|$enclosure|$slot|$ctl\n");
                 $generated_rows++;
 
-                // Resetam dupa scriere
                 $enclosure = "";
                 $slot = "";
                 $serial = "";

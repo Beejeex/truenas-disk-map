@@ -1,7 +1,0 @@
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas_interface/data
-
-sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
-
-sudo docker rm -f truenas_interface 2>/dev/null || true
-
-sudo docker run -d --name truenas_interface --restart unless-stopped -p 8585:80 -v /dev:/dev -v /etc/localtime:/etc/localtime:ro -v /mnt/YOUR_POOL/apps/truenas_interface/data:/var/www/html/data --privileged ghcr.io/beejeex/truenas-disk-map:latest

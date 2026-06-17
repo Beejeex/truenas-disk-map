@@ -1,13 +1,9 @@
 <?php
-// gen_disk_unused_api.php
-// Scop: listeaza toate disk-urile NEFOLOSITE in niciun pool (excluzand BOOT),
-// folosind API-ul TrueNAS (fara midclt/jq) si scrie rezultatul in
-// hdd_controlere/disk_unused_no_pool.txt
+// Generate disk_data/disk_unused_no_pool.txt with non-boot disks that are not assigned to a pool.
 
-// ====== CONFIG ======
 require_once __DIR__ . "/config_api.php";
 
-$target_dir  = __DIR__ . "/hdd_controlere";
+$target_dir  = __DIR__ . "/disk_data";
 $target_file = $target_dir . "/disk_unused_no_pool.txt";
 
 if (!is_dir($target_dir))
@@ -25,7 +21,6 @@ if (!tdm_api_configured())
     return;
 }
 
-// ====== Functii helper ======
 function api_request_get($url, $api_key, $verify_tls)
 {
     $ch = curl_init();
@@ -162,8 +157,7 @@ function collect_disks_from_vdev_list($vdev_list, &$set_assoc)
     }
 }
 
-// ====== MAIN ======
-// 1) Toate disk-urile: /disk
+// All disks: /disk
 $disks_json = api_request_get($API_URL . "/disk", $API_KEY, $VERIFY_TLS);
 $disks_arr  = json_decode($disks_json, true);
 if (!is_array($disks_arr)) throw new RuntimeException("Invalid /disk response.");
@@ -177,16 +171,16 @@ foreach ($disks_arr as $d)
     }
 }
 
-// 2) Pool-uri: /pool
+// Pools: /pool
 $pools_json = api_request_get($API_URL . "/pool", $API_KEY, $VERIFY_TLS);
 $pools      = json_decode($pools_json, true);
 if (!is_array($pools)) throw new RuntimeException("Invalid /pool response.");
 
-// 3) BOOT disks: incercam GET, fallback POST /core/call
+// Boot disks: try GET first, then POST /core/call.
 $boot_arr  = array();
 $resp_ok   = true;
 
-// GET direct
+// Direct GET.
 try {
     $resp = api_request_get($API_URL . "/boot/get_disks", $API_KEY, $VERIFY_TLS);
     $tmp  = json_decode($resp, true);
@@ -211,7 +205,7 @@ foreach ($boot_arr as $b)
     add_disk($boot_set, $b);
 }
 
-// 4) Discurile folosite in pool-uri
+// Disks already used by pools.
 $used_set = array();
 foreach ($pools as $pool)
 {
@@ -229,7 +223,7 @@ foreach ($pools as $pool)
     }
 }
 
-// 5) Diferenta: ALL - (USED ∪ BOOT)
+// Difference: all disks minus used and boot disks.
 $used_or_boot = $used_set + $boot_set;
 $unused_list  = array();
 
@@ -241,7 +235,6 @@ foreach ($all_disks_set as $disk_name => $_v)
     }
 }
 
-// 6) Sortare si scriere
 sort($unused_list, SORT_STRING);
 
 $f = fopen($target_file, "w");
@@ -253,4 +246,4 @@ foreach ($unused_list as $name)
 }
 fclose($f);
 
-echo "Generat: " . $target_file . "\n";
+echo "[OK] Generated: " . $target_file . "\n";

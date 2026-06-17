@@ -27,7 +27,7 @@ ghcr.io/beejeex/truenas-disk-map:783bd0b
 - Shows model, capacity, power-on hours, temperature, serial, and selected SMART counters.
 - Shows TrueNAS pool, spare, and unused labels when the optional API key is configured.
 - Lets you turn SES identify LEDs on and off per disk.
-- Writes diagnostics to `hdd_controlere/discovery.txt` and `hdd_controlere/discovery.json`.
+- Writes diagnostics to `disk_data/discovery.txt` and `disk_data/discovery.json`.
 
 ## Safety Model
 
@@ -125,7 +125,7 @@ Use a dataset/path that exists on your TrueNAS system:
 
 ```bash
 sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data
 sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
 sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
 ```
@@ -215,8 +215,8 @@ Read Only: disabled
 ```
 
 ```text
-Host Path: /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
-Mount Path: /var/www/html/hdd_controlere
+Host Path: /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data
+Mount Path: /var/www/html/disk_data
 Read Only: disabled
 ```
 
@@ -236,7 +236,7 @@ Create the host paths first:
 
 ```bash
 sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data
 sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
 sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
 ```
@@ -273,7 +273,7 @@ services:
       - /dev:/dev
       - /etc/localtime:/etc/localtime:ro
       - /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data
-      - /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere
+      - /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data:/var/www/html/disk_data
 ```
 
 If your TrueNAS version rejects `pull_policy`, remove that line and use the app upgrade/redeploy action to pull a newer image later.
@@ -292,7 +292,7 @@ Use this if you prefer a manual Docker container.
 
 ```bash
 sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data
 sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
 sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
 ```
@@ -311,7 +311,7 @@ sudo docker run -d \
   -v /dev:/dev \
   -v /etc/localtime:/etc/localtime:ro \
   -v /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data \
-  -v /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data:/var/www/html/disk_data \
   --privileged \
   ghcr.io/beejeex/truenas-disk-map:latest
 ```
@@ -342,7 +342,7 @@ sudo docker run -d \
   -v /dev:/dev \
   -v /etc/localtime:/etc/localtime:ro \
   -v /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data \
-  -v /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data:/var/www/html/disk_data \
   --privileged \
   ghcr.io/beejeex/truenas-disk-map:latest
 ```
@@ -471,14 +471,14 @@ sudo docker exec -it truenas_interface bash -lc 'php /var/www/html/run_regen.php
 Generated files and diagnostics are in:
 
 ```text
-/var/www/html/hdd_controlere
+/var/www/html/disk_data
 ```
 
 If the UI shows `0 files analyzed`, run `Refresh` and then check:
 
 ```text
-hdd_controlere/discovery.txt
-hdd_controlere/discovery.json
+disk_data/discovery.txt
+disk_data/discovery.json
 ```
 
 ## Build From Source
@@ -491,7 +491,7 @@ cd truenas-disk-map
 sudo docker build -t truenas_interface .
 ```
 
-Run it with the same `/dev`, `data`, `hdd_controlere`, localtime, port, and `--privileged` settings shown above.
+Run it with the same `/dev`, `data`, `disk_data`, localtime, port, and `--privileged` settings shown above.
 
 ## Project Status
 

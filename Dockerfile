@@ -20,7 +20,7 @@ RUN echo "max_execution_time = 180" > /usr/local/etc/php/conf.d/custom.ini
 COPY . /var/www/html/
 WORKDIR /var/www/html/
 RUN rm -f /var/www/html/index.html
-RUN mkdir -p /var/www/html/data /var/www/html/hdd_controlere
+RUN mkdir -p /var/www/html/data /var/www/html/disk_data
 RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
 
 RUN echo "www-data ALL=(root) NOPASSWD: /usr/local/sbin/tdm-smartctl-read, /usr/local/sbin/tdm-sas3ircu-read, /usr/local/sbin/tdm-lsscsi-read, /usr/local/sbin/tdm-sg-ses-ident" > /etc/sudoers.d/truenas-disk-map \

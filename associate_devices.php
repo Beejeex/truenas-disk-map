@@ -4,7 +4,7 @@ require_once __DIR__ . "/hardware_helpers.php";
 $data = "";
 $known_serials = array();
 
-// 1. Luam lista corecta de device-uri din smartctl
+// Start with the device list reported by smartctl.
 $scan_code = 0;
 $scan_output = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "--scan"), $scan_code);
 $lines = explode("\n", trim($scan_output));
@@ -15,7 +15,7 @@ foreach ($lines as $line)
 
     if ($line != "")
     {
-        // Extrage /dev/sdX
+        // Extract /dev/sdX.
         preg_match('/(\/dev\/[A-Za-z0-9._-]+)/', $line, $dev_match);
 
         if (isset($dev_match[1]))
@@ -29,7 +29,7 @@ foreach ($lines as $line)
             $serial = "";
             $device_type = "";
 
-            // Extrage -d TYPE daca exista
+            // Extract -d TYPE when present.
             preg_match('/-d\s+([A-Za-z0-9,+_-]+)/', $line, $type_match);
 
             if (isset($type_match[1]))

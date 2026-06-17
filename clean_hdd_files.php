@@ -1,6 +1,6 @@
 <?php
 
-$dir = "hdd_controlere";
+$dir = "disk_data";
 $deleted = 0;
 $deleted_extra = 0;
 $errors = array();
@@ -21,7 +21,7 @@ if (is_dir($dir))
                 }
                 else
                 {
-                    $errors[] = "Nu am putut sterge: " . $file;
+                    $errors[] = "Could not delete: " . $file;
                 }
             }
         }
