@@ -232,17 +232,6 @@ After the page loads, click `Refresh` to generate the disk map files.
 
 TrueNAS also has an `Install via YAML` option in the Apps `Discover` screen. This is usually faster than filling every Custom App field manually.
 
-Create the host paths first:
-
-```bash
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data
-sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
-sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
-```
-
-Replace `YOUR_POOL` with your pool name.
-
 In the TrueNAS UI, open:
 
 ```text
@@ -264,16 +253,52 @@ services:
     pull_policy: always
     hostname: truenas-disk-map
     restart: unless-stopped
+
     privileged: true
-    ports:
-      - "8585:80/tcp"
+
     environment:
       TZ: Europe/Brussels
+
+    ports:
+      - "8585:80/tcp"
+
     volumes:
-      - /dev:/dev
-      - /etc/localtime:/etc/localtime:ro
-      - /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data
-      - /mnt/YOUR_POOL/apps/truenas-disk-map/disk_data:/var/www/html/disk_data
+      # Hardware access required for disks, SMART, and SES LEDs.
+      - type: bind
+        source: /dev
+        target: /dev
+
+      # Use the TrueNAS host timezone.
+      - type: bind
+        source: /etc/localtime
+        target: /etc/localtime
+        read_only: true
+
+      # Automatically managed persistent application storage.
+      - type: volume
+        source: app-data
+        target: /var/www/html/data
+
+      - type: volume
+        source: disk-data
+        target: /var/www/html/disk_data
+
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /var/www/html/data /var/www/html/disk_data
+        chown -R www-data:www-data \
+          /var/www/html/data \
+          /var/www/html/disk_data
+        chmod -R u+rwX,g+rwX,o-rwx \
+          /var/www/html/data \
+          /var/www/html/disk_data
+        exec apachectl -D FOREGROUND
+
+volumes:
+  app-data:
+  disk-data:
 ```
 
 If your TrueNAS version rejects `pull_policy`, remove that line and use the app upgrade/redeploy action to pull a newer image later.

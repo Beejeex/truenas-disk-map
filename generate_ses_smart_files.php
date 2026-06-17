@@ -304,7 +304,6 @@ function get_smart_report($dev)
 
     $overall_passed = ($details['overall_health'] === '' || $details['overall_health'] === 'PASSED' || $details['overall_health'] === 'OK');
 
-    $temp = $details['temperature_c'] !== '' ? (int)$details['temperature_c'] : null;
     $active_media_indicators = 0;
     foreach (array('reallocated', 'reallocation_events', 'pending', 'uncorrectable', 'reported_uncorrectable', 'end_to_end_errors') as $indicator)
     {
@@ -326,7 +325,6 @@ function get_smart_report($dev)
         $details['read_failure'] ||
         $details['reallocated'] >= 100 ||
         $details['reallocation_events'] >= 100 ||
-        ($temp !== null && $temp >= 55) ||
         $active_media_indicators >= 2)
     {
         return array('status' => tdm_format_smart_status("CRITICAL", $details), 'details' => $details);
@@ -335,8 +333,7 @@ function get_smart_report($dev)
     if (($details['reallocated'] >= 10 && $details['reallocated'] <= 99) ||
         ($details['reallocation_events'] >= 10 && $details['reallocation_events'] <= 99) ||
         $details['spin_retry_count'] >= 3 ||
-        $details['calibration_retry_count'] >= 3 ||
-        ($temp !== null && $temp >= 50 && $temp <= 54))
+        $details['calibration_retry_count'] >= 3)
     {
         return array('status' => tdm_format_smart_status("DANGEROUS", $details), 'details' => $details);
     }
@@ -346,8 +343,7 @@ function get_smart_report($dev)
         $details['spin_retry_count'] > 0 ||
         $details['calibration_retry_count'] > 0 ||
         $details['command_timeout'] > 0 ||
-        $details['high_fly_writes'] > 0 ||
-        ($temp !== null && $temp >= 45 && $temp <= 49))
+        $details['high_fly_writes'] > 0)
     {
         return array('status' => tdm_format_smart_status("SUSPECT", $details), 'details' => $details);
     }
