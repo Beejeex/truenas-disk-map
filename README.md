@@ -1,261 +1,226 @@
-TrueNAS Disk Control (SES + SMART + Web UI)
-<img width="1192" height="1234" alt="pic_1" src="https://github.com/user-attachments/assets/607a14c7-0e7d-4a03-bfcd-5438f5824af2" />
-<img width="1165" height="683" alt="pic_2" src="https://github.com/user-attachments/assets/52bac8ad-613c-4169-a3ea-77141d515672" />
+# TrueNAS Disk Map
 
-## Fork notes
+TrueNAS Disk Map is a small web utility for mapping disks, SES enclosure slots, SMART health, pool membership, and identify LEDs on TrueNAS SCALE systems.
 
-This fork removes the old hard-coded SES model filters. Enclosures are now detected generically from:
+It is meant for systems where `/dev/sdX` device names, serial numbers, and physical drive bays are hard to keep straight. The app builds a visual disk layout, lets you inspect SMART data, and can turn a bay identify LED on or off.
 
-```
-lsscsi -g
-```
+## Current Image
 
-Any `enclosu` row is considered, including Supermicro / LSI `SAS2X36` devices such as:
-
-```
-[1:0:24:0] enclosu LSI SAS2X36 0e12 - /dev/sg25
+```text
+ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-Generated diagnostics are written to:
+Pinned builds are also published by commit tag, for example:
 
+```text
+ghcr.io/beejeex/truenas-disk-map:783bd0b
 ```
-hdd_controlere/discovery.txt
-hdd_controlere/discovery.json
+
+## What It Does
+
+- Detects SES enclosures from `lsscsi -g`.
+- Supports generic `enclosu` devices, including LSI/Supermicro `SAS2X36`.
+- Uses `sas3ircu` only as an optional read-only inventory source.
+- Falls back to `lsscsi -g` plus `smartctl` when `sas3ircu` cannot detect the controller.
+- Maps slot to disk to serial where the enclosure layout exposes matching target numbers.
+- Reads SMART identity and health data.
+- Shows model, capacity, power-on hours, temperature, serial, and selected SMART counters.
+- Shows TrueNAS pool, spare, and unused labels when the optional API key is configured.
+- Lets you turn SES identify LEDs on and off per disk.
+- Writes diagnostics to `hdd_controlere/discovery.txt` and `hdd_controlere/discovery.json`.
+
+## Safety Model
+
+The container needs broad hardware access because SCSI generic enclosure devices can be root-only. The app itself limits what the web process can execute.
+
+Allowed hardware actions:
+
+- Read-only inventory through wrapper scripts.
+- Read-only SMART queries through wrapper scripts.
+- SES identify LED on/off through a strict wrapper.
+
+LED commands are limited to generated commands of this form:
+
+```bash
+sg_ses --dev-slot-num=N --set=ident /dev/sgX
+sg_ses --dev-slot-num=N --clear=ident /dev/sgX
 ```
 
-The LED endpoints validate generated `sg_ses` commands server-side before execution. The Docker image also limits passwordless sudo to small validation wrappers instead of allowing raw hardware tools or every command.
+The web process cannot run arbitrary shell commands. The Docker sudoers file only allows these wrappers:
 
-`sas3ircu` is used only as a read-only inventory source when it detects the controller. The application calls only:
+- `/usr/local/sbin/tdm-smartctl-read`
+- `/usr/local/sbin/tdm-sas3ircu-read`
+- `/usr/local/sbin/tdm-lsscsi-read`
+- `/usr/local/sbin/tdm-sg-ses-ident`
 
-```
+`sas3ircu` is not required for LED control. It is used only for:
+
+```bash
 sas3ircu list
 sas3ircu <controller> display
 ```
 
-Those calls are routed through `/usr/local/sbin/tdm-sas3ircu-read`, which rejects destructive `sas3ircu` subcommands such as delete, hotspare, offline/online, locate, boot changes, and log clearing.
+If `sas3ircu` returns an error, the app falls back to `lsscsi -g`.
 
-If `sas3ircu` does not detect the controller, the app falls back to `lsscsi -g` plus `smartctl -i`. For enclosures like `LSI SAS2X36`, disk H:C:T:L target numbers are used as zero-based SES device slot numbers and the matching `enclosu` `/dev/sgN` device is used for LED identify commands.
+## Hardware Notes
 
-LEDs are controlled separately through `/usr/local/sbin/tdm-sg-ses-ident`, which allows only `sg_ses --dev-slot-num=N --set=ident` and `sg_ses --dev-slot-num=N --clear=ident`.
+The app detects enclosure rows like this:
 
-
-This project is a small utility written mostly in procedural PHP (i do my best in it) that helps visualize and control disks in a TrueNAS system with SAS controllers and SES enclosures.
-
-It was created because managing large disk arrays can be confusing, especially when trying to identify the physical disk corresponding to a specific device (/dev/sdX) or serial number. ( and usually not many people can afford a truenas enclosure that can click a disk and the LED identifier turns on so you can swap that disk)
-
-
-The goal of this project is to provide a simple visual interface and automation pipeline that:
-
-•	detects SAS controllers and disks (originally tested with LSI SAS3008 flashed IT Mode)
-
-•	maps serial numbers ↔ Linux devices
-
-•	retrieves SMART information
-
-•	detects which disks belong to TrueNAS pools
-
-•	identifies unused disks / or spare disks
-
-•	maps disks to SES slots
-
-•	allows turning disk identification LEDs ON/OFF (tehnically speaking , this is the main goal. )
-
-•	shows all disks in a visual grid that matches the physical enclosure layout
-
-•	see the health status of each disk (personal preferance condition list)
-
-•	see which pool the disk belongs to
-
-
-________________________________________
-
-
-
-Why this project exists : 
-
-TrueNAS already provides powerful tools, but they are mostly CLI-based and not always convenient when dealing with many disks.
-When working with large storage systems, especially with external SAS enclosures, it is often difficult to quickly determine:
-
-•	which physical disk corresponds to /dev/sdX 
-
-•	where a disk is located inside the enclosure (im tired of spreadsheets and non labels)
-
-
-________________________________________
-
-How it works (* it's a bold title it should be like "how it should work")
-
-The system runs a pipeline that collects data from multiple sources:
-1.	Detect SAS controllers
-2.	Read disk-slot information using `sas3ircu display`, or fall back to `lsscsi -g` target numbers when `sas3ircu` cannot see the controller
-3.	Associate disk serial numbers
-4.	Collect SMART information using smartctl (for each disk)
-5.	Detect SES enclosures generically from `lsscsi -g`
-6.	Build SES commands for LED control
-7.	Query TrueNAS API to determine:
-    o	disks used by pools
-    o	spare disks
-    o	unused disks
-
-You have to change the ip and api in: config_api.php
-
-________________________________________
-
-Web interface features
-
-Each disk tile displays:
-
-•	slot number
-
-•	device (/dev/sdX)
-
-•	serial number
-
-•	SMART health status
-
-•	pool membership
-
-•	spare status
-
-•	unused disks
-
-You can also:
-
-•	search by serial or device
-
-•	filter by pool
-
-•	view full SMART output
-
-•	turn disk LED ON/OFF
-
-•	regenerate the entire dataset from the UI
-
-
-Example of disk control command execution:
-
-•	sg_ses --dev-slot-num=0 --set=ident /dev/sg25  (slot 0 is physical bay 1 on SAS2X36)
-
-•	sg_ses --dev-slot-num=0 --clear=ident /dev/sg25
-
-________________________________________
-
-Requirements
-
-This project assumes a system with:
-
-•	TrueNAS SCALE
-
-•	SAS/SATA disks visible in `lsscsi -g`
-
-•	SES compatible enclosures visible as `enclosu` devices in `lsscsi -g`
-
-•	smartctl
-
-•	sas3ircu (optional but used when it supports the controller)
-
-•	sg_ses
-
-•	PHP (CLI + web)
-
-The script also uses the TrueNAS API for retrieving pool and disk information.
-
-Note: On hardware where `sas3ircu` does not detect the controller, the fallback assumes the `lsscsi -g` target number maps to the zero-based SES device slot number. This matches common direct-attached SES layouts such as `[1:0:0:0]` through `[1:0:23:0]` disks with an enclosure like `[1:0:24:0] enclosu ... /dev/sg25`, where `--dev-slot-num=0` lights physical bay 1.
-
-Basically it's a docker container, see the instalation part.
-
-________________________________________
-
-Contributions are very welcome.
-
-I am comfortable with PHP, but I am still learning parts related to:
-
-•	Bash scripting
-
-•	TrueNAS internals
-
-•	SAS / SES environments
-
-
-So if you have improvements, ideas, or optimizations, feel free to open:
-
-•	Pull Requests
-
-•	Issues
-
-•	Suggestions
-
-Any help is appreciated.
-________________________________________
-
-Project status
-
-This project is currently a personal tool that evolved over time while managing a storage system. 
-
-The code is functional but still evolving and may require adjustments depending on:
-
-•	controller models
-
-•	enclosure types
-
-•	TrueNAS versions
-
-
-________________________________________
-
-Installation from TrueNAS Shell
-
-The easiest deployment path is to pull the prebuilt image from GitHub Container Registry directly on the TrueNAS host.
-
-The container still needs:
-
-•	`/dev` access for `smartctl`, `lsscsi`, `sas3ircu`, and `sg_ses`
-
-•	system time from the host
-
-•	`--privileged`, because SES devices such as `/dev/sg25` may be root-only
-
-Inside the image, the web process cannot run arbitrary hardware commands. It can only use the read-only wrappers for inventory/SMART plus the LED identify wrapper for `sg_ses --dev-slot-num=N --set=ident` and `sg_ses --dev-slot-num=N --clear=ident`.
-
-1. Open a TrueNAS shell or connect over SSH.
-
-Example:
-
-```bash
-ssh truenas_admin@YOUR_TRUENAS_IP
+```text
+[1:0:24:0] enclosu LSI SAS2X36 0e12 - /dev/sg25
 ```
 
-2. Create a persistent data directory.
+For layouts like:
 
-Choose a dataset/path that exists on your TrueNAS system. Example:
-
-```bash
-sudo mkdir -p /mnt/YOUR_POOL/apps/truenas_interface/data
+```text
+[1:0:0:0]  disk ... /dev/sdb /dev/sg1
+[1:0:1:0]  disk ... /dev/sdc /dev/sg2
+...
+[1:0:24:0] enclosu LSI SAS2X36 0e12 - /dev/sg25
 ```
 
-3. Pull the image.
+the fallback treats the target number as the zero-based SES slot number. On a SAS2X36 layout, slot `0` is physical bay `1`.
+
+Manual LED test:
 
 ```bash
-sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
+sudo sg_ses --dev-slot-num=0 --set=ident /dev/sg25
+sudo sg_ses --dev-slot-num=0 --clear=ident /dev/sg25
 ```
 
-4. Start the container.
+## Requirements
+
+- TrueNAS SCALE.
+- Docker or TrueNAS Apps Custom App.
+- Disks visible in `lsscsi -g`.
+- SES enclosure visible as an `enclosu` device in `lsscsi -g`.
+- `/dev` mounted into the container.
+- Privileged container mode.
+
+The image includes the required userland tools:
+
+- `lsscsi`
+- `sg_ses`
+- `smartctl`
+- `sas3ircu`
+
+## Deployment Option 1: TrueNAS Custom App UI
+
+This is the recommended deployment path when you want the app managed by the TrueNAS Apps UI.
+
+### Remove Old Shell Container
+
+If you previously started the container manually from the shell, remove it first:
 
 ```bash
-sudo docker rm -f truenas_interface 2>/dev/null || true
-
-sudo docker run -d \
-  --name truenas_interface \
-  --restart unless-stopped \
-  -p 8585:80 \
-  -v /dev:/dev \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /mnt/YOUR_POOL/apps/truenas_interface/data:/var/www/html/data \
-  --privileged \
-  ghcr.io/beejeex/truenas-disk-map:latest
+sudo docker rm -f truenas_interface
+sudo docker rmi ghcr.io/beejeex/truenas-disk-map:latest 2>/dev/null || true
 ```
 
-5. Open the interface.
+Keep the old data directory if you want to preserve API settings.
+
+### Create Host Paths
+
+Use a dataset/path that exists on your TrueNAS system:
+
+```bash
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
+sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
+```
+
+Replace `YOUR_POOL` with your pool name.
+
+### Install Custom App
+
+In the TrueNAS UI, open:
+
+```text
+Apps -> Discover Apps -> Custom App
+```
+
+Use these settings.
+
+Application name:
+
+```text
+truenas-disk-map
+```
+
+Image Configuration:
+
+```text
+Repository: ghcr.io/beejeex/truenas-disk-map
+Tag: latest
+Pull Policy: Always pull image
+```
+
+If `Always pull image` is not available, use `Pull the image if it is not already present on the host`.
+
+Container Configuration:
+
+```text
+Hostname: truenas-disk-map
+Entrypoint: leave empty
+Command: leave empty
+```
+
+Optional environment variable:
+
+```text
+TZ=Europe/Brussels
+```
+
+Security Context Configuration:
+
+```text
+Privileged Mode: enabled
+Run as non-root: disabled or default
+Read-only root filesystem: disabled
+Allow privilege escalation: enabled if shown
+```
+
+Network Configuration:
+
+```text
+Host Network: disabled
+Container Port: 80
+Host Port: 8585
+Protocol: TCP
+```
+
+Portal Configuration:
+
+```text
+Protocol: HTTP
+Port: 8585
+Path: /
+```
+
+Storage Configuration:
+
+Add these host path mounts:
+
+```text
+Host Path: /dev
+Mount Path: /dev
+Read Only: disabled
+```
+
+```text
+Host Path: /mnt/YOUR_POOL/apps/truenas-disk-map/data
+Mount Path: /var/www/html/data
+Read Only: disabled
+```
+
+```text
+Host Path: /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+Mount Path: /var/www/html/hdd_controlere
+Read Only: disabled
+```
+
+Install the app, then open:
 
 ```text
 http://TRUENAS_IP:8585
@@ -264,80 +229,54 @@ http://TRUENAS_IP:8585
 Example:
 
 ```text
-http://192.168.1.10:8585
+http://172.20.1.200:8585
 ```
 
-After opening the interface, click `Refresh` to generate the disk map files.
+After the page loads, click `Refresh` to generate the disk map files.
 
-The TrueNAS API is optional. Without it, the app still maps slots, reads SMART data, detects SES, and controls identify LEDs. Pool, spare, and unused labels are skipped until API settings are configured.
+## Deployment Option 2: TrueNAS Shell
 
-To add API details, open `API Settings` in the web interface and enter:
+Use this if you prefer a manual Docker container.
 
-•	API URL, for example `https://TRUENAS_IP/api/v2.0`
+```bash
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
+sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
+```
 
-•	API key from the TrueNAS UI
+Pull and run:
 
-The settings are saved in the mounted `data` directory.
+```bash
+sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
 
-Creating a Read-Only TrueNAS API Key
+sudo docker rm -f truenas_interface 2>/dev/null || true
 
-The API key is only used for optional pool, spare, and unused-disk labels. The app does not need API permission to change disks, pools, datasets, services, users, or system settings.
+sudo docker run -d \
+  --name truenas_interface \
+  --restart unless-stopped \
+  -p 8585:80 \
+  -v /dev:/dev \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere \
+  --privileged \
+  ghcr.io/beejeex/truenas-disk-map:latest
+```
 
-The API calls used by this app are read-only:
+Open:
 
-•	`GET /api/v2.0/disk`
+```text
+http://TRUENAS_IP:8585
+```
 
-•	`GET /api/v2.0/pool`
+Click `Refresh` after first load.
 
-•	`GET /api/v2.0/boot/get_disks` or `POST /api/v2.0/core/call` with `boot.get_disks`
+## Updating
 
-TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access rights of the user selected when the key is created, so the safest setup is to create a dedicated low-privilege user for this app if your TrueNAS version lets you do that.
+For the Custom App UI, edit the app and make sure the image tag is `latest` with pull policy set to pull the image again. Then redeploy or upgrade the app.
 
-Quick guide:
-
-1. Log in to the TrueNAS web UI over HTTPS.
-
-2. Create or choose a dedicated user for this app, for example `truenas_disk_map_ro`.
-
-3. Give that user the most limited read-only role available in your TrueNAS version. It only needs to read disk, pool, and boot-disk metadata.
-
-4. Open the top-right user/settings menu and select `My API Keys`.
-
-5. Click `Add API Key`.
-
-6. Enter a descriptive name, for example `truenas-disk-map`.
-
-7. Select the dedicated user from the `Username` dropdown if the screen asks for one.
-
-8. Leave `Non-expiring` enabled if this is a home/lab install and you do not want scheduled rotation, or disable it and pick an expiration date if you prefer key rotation.
-
-9. Click `Save`.
-
-10. Copy the generated key immediately. TrueNAS shows the API key only once.
-
-11. In this app, open `API Settings`, enter `https://TRUENAS_IP/api/v2.0`, paste the key, and save.
-
-Alternate path:
-
-If your TrueNAS UI does not show `My API Keys`, open `Credentials` > `Users`, select the user, then use the `View API Keys` link in the user access area.
-
-Important notes:
-
-•	Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
-
-•	API keys are sensitive. Treat them like passwords.
-
-•	If you close the TrueNAS key dialog before copying the key, reset the API key and copy the new value.
-
-•	TrueNAS documentation: https://www.truenas.com/docs/scale/25.10/scaletutorials/toptoolbar/managingapikeys/
-
-If your TrueNAS version does not expose a clear read-only role for API keys, leave the API settings empty. The app will still map slots, read SMART data, detect SES, and control identify LEDs; it will only skip pool/spare/unused labels.
-
-________________________________________
-
-Updating the Container
-
-From the TrueNAS shell:
+For the shell deployment:
 
 ```bash
 sudo docker pull ghcr.io/beejeex/truenas-disk-map:latest
@@ -350,22 +289,149 @@ sudo docker run -d \
   -p 8585:80 \
   -v /dev:/dev \
   -v /etc/localtime:/etc/localtime:ro \
-  -v /mnt/YOUR_POOL/apps/truenas_interface/data:/var/www/html/data \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data \
+  -v /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere \
   --privileged \
   ghcr.io/beejeex/truenas-disk-map:latest
 ```
 
-For a pinned build, use the commit tag:
+## TrueNAS API Settings
 
-```bash
-ghcr.io/beejeex/truenas-disk-map:COMMIT_SHA
+The TrueNAS API is optional.
+
+Without API settings, the app still:
+
+- Maps slots.
+- Reads SMART data.
+- Detects SES enclosures.
+- Controls identify LEDs.
+
+With API settings, the app can also label:
+
+- Pool disks.
+- Spare disks.
+- Unused disks.
+
+Configure it from the web UI:
+
+```text
+API Settings
 ```
 
-________________________________________
+Use:
 
-Optional: Build from Source
+```text
+API URL: https://TRUENAS_IP/api/v2.0
+API Key: your TrueNAS API key
+```
 
-Use this only if you want to modify the code locally on the TrueNAS host.
+The settings are saved in:
+
+```text
+/var/www/html/data/config_api.local.php
+```
+
+If you used the deployment examples above, that file persists on the host in:
+
+```text
+/mnt/YOUR_POOL/apps/truenas-disk-map/data
+```
+
+## Creating a Read-Only API Key
+
+The API key is used only for optional labels. The app does not need API permission to change disks, pools, datasets, users, services, or system settings.
+
+The app uses these read-only API calls:
+
+- `GET /api/v2.0/disk`
+- `GET /api/v2.0/pool`
+- `GET /api/v2.0/boot/get_disks`
+- `POST /api/v2.0/core/call` with `boot.get_disks`
+
+TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access rights of the selected user, so the safest setup is a dedicated low-privilege user.
+
+Quick guide:
+
+1. Log in to the TrueNAS web UI over HTTPS.
+2. Create or choose a dedicated user, for example `truenas_disk_map_ro`.
+3. Give that user the most limited read-only role available in your TrueNAS version.
+4. Open the top-right user/settings menu.
+5. Select `My API Keys`.
+6. Click `Add API Key`.
+7. Name it `truenas-disk-map`.
+8. Select the dedicated user if the form asks for one.
+9. Save the key.
+10. Copy the generated key immediately. TrueNAS shows it only once.
+11. Open this app, click `API Settings`, paste the key, and save.
+
+Alternate path:
+
+```text
+Credentials -> Users -> select user -> View API Keys
+```
+
+Important:
+
+- Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
+- Treat API keys like passwords.
+- If you close the TrueNAS key dialog before copying the key, reset it and copy the new value.
+
+If your TrueNAS version does not expose a clear read-only role, leave API settings empty. The app will still work for slot mapping, SMART, SES detection, and identify LEDs.
+
+## Troubleshooting
+
+Check hardware visibility inside the running container:
+
+```bash
+sudo docker exec -it truenas_interface bash -lc '
+echo "=== SG devices ==="
+ls -l /dev/sg* 2>/dev/null
+
+echo
+echo "=== SCSI devices ==="
+lsscsi -g
+
+echo
+echo "=== Enclosures ==="
+lsscsi -g | grep -i enclosu
+
+echo
+echo "=== Required commands ==="
+command -v lsscsi
+command -v sg_ses
+command -v smartctl
+command -v sas3ircu
+'
+```
+
+Expected enclosure example:
+
+```text
+[1:0:24:0] enclosu LSI SAS2X36 0e12 - /dev/sg25
+```
+
+Regenerate files from the shell:
+
+```bash
+sudo docker exec -it truenas_interface bash -lc 'php /var/www/html/run_regen.php'
+```
+
+Generated files and diagnostics are in:
+
+```text
+/var/www/html/hdd_controlere
+```
+
+If the UI shows `0 files analyzed`, run `Refresh` and then check:
+
+```text
+hdd_controlere/discovery.txt
+hdd_controlere/discovery.json
+```
+
+## Build From Source
+
+Use this only if you want to modify the code locally.
 
 ```bash
 git clone https://github.com/Beejeex/truenas-disk-map.git
@@ -373,41 +439,22 @@ cd truenas-disk-map
 sudo docker build -t truenas_interface .
 ```
 
-Then run it with the same `/dev`, localtime, data mount, and `--privileged` options shown above, replacing the image name with `truenas_interface`.
+Run it with the same `/dev`, `data`, `hdd_controlere`, localtime, port, and `--privileged` settings shown above.
 
-________________________________________
-Language
+## Project Status
 
-The interface and some error messages are currently written in Romanian, which is my native language.
+This is a personal tool that is evolving around real TrueNAS hardware. It is functional, but enclosure/controller mappings can vary by hardware.
 
-Future versions may include full English localization.
+Useful test output for new hardware:
 
-Contributions for translations are welcome.
+- `lsscsi -g`
+- `sg_ses --join /dev/sgX`
+- `smartctl -x /dev/sdX`
+- `sas3ircu list`
+- `sas3ircu <controller> display`
 
-________________________________________
+Contributions, issues, and hardware reports are welcome.
 
-Credits (Images)
-Some of the images used in this project were created specifically for this interface.
+## Credits
 
-I initially searched online for icons that could represent a disk inside an enclosure, but I couldn't find anything that matched what I needed. Because of that, I experimented with AI image generation (ChatGPT image tools) until I obtained a visual style that was close to what I had in mind.
-
-From those generated images I selected a small section and manually cropped it in Paint to create the base disk graphic.
-
-The colored LED indicators used for disk status (OK, warning, error, etc.) were later created with the help of a colleague using Photoshop, since I do not personally know how to work with Photoshop.
-
-So the final images are a combination of:
-
-•	AI generated visuals
-
-•	manual cropping/editing
-
-•	additional graphical elements created by a colleague
-
-
-
-
-
-
-
-
-
+The disk images used by the UI were created specifically for this project. The base disk graphics started from AI-generated visual experiments, then were manually cropped and edited. Additional LED/status elements were created with Photoshop help from a colleague.
