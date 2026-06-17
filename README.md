@@ -228,7 +228,65 @@ http://TRUENAS_IP:8585
 
 After the page loads, click `Refresh` to generate the disk map files.
 
-## Deployment Option 2: TrueNAS Shell
+## Deployment Option 2: TrueNAS Install via YAML
+
+TrueNAS also has an `Install via YAML` option in the Apps `Discover` screen. This is usually faster than filling every Custom App field manually.
+
+Create the host paths first:
+
+```bash
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/data
+sudo mkdir -p /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere
+sudo chown -R 33:33 /mnt/YOUR_POOL/apps/truenas-disk-map
+sudo chmod -R 775 /mnt/YOUR_POOL/apps/truenas-disk-map
+```
+
+Replace `YOUR_POOL` with your pool name.
+
+In the TrueNAS UI, open:
+
+```text
+Apps -> Discover Apps -> Install via YAML
+```
+
+Name:
+
+```text
+truenas-disk-map
+```
+
+Custom Config:
+
+```yaml
+services:
+  truenas-disk-map:
+    image: ghcr.io/beejeex/truenas-disk-map:latest
+    pull_policy: always
+    hostname: truenas-disk-map
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8585:80/tcp"
+    environment:
+      TZ: Europe/Brussels
+    volumes:
+      - /dev:/dev
+      - /etc/localtime:/etc/localtime:ro
+      - /mnt/YOUR_POOL/apps/truenas-disk-map/data:/var/www/html/data
+      - /mnt/YOUR_POOL/apps/truenas-disk-map/hdd_controlere:/var/www/html/hdd_controlere
+```
+
+If your TrueNAS version rejects `pull_policy`, remove that line and use the app upgrade/redeploy action to pull a newer image later.
+
+Open:
+
+```text
+http://TRUENAS_IP:8585
+```
+
+After the page loads, click `Refresh`.
+
+## Deployment Option 3: TrueNAS Shell
 
 Use this if you prefer a manual Docker container.
 
