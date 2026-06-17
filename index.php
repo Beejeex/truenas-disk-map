@@ -464,6 +464,28 @@ foreach ($files as $file)
 .hdd-tile.empty      .led-dot{ background:#fff; box-shadow:0 0 6px rgba(255,255,255,.7); }
 .hdd-tile.smart-unused .led-dot{  background:#2da8ff;  box-shadow:0 0 10px rgba(45,168,255,.9);}
 
+.tile-led-toggle{
+  position:absolute;
+  top:8px;
+  left:8px;
+  z-index:4;
+  min-width:34px;
+  height:22px;
+  padding:0 7px;
+  border-radius:5px;
+  border:1px solid rgba(255,255,255,.22);
+  background:rgba(11,14,20,.78);
+  color:#e8eef5;
+  font-size:10px;
+  font-weight:700;
+  line-height:20px;
+  cursor:pointer;
+}
+.tile-led-toggle:hover{ background:rgba(22,29,40,.92); border-color:rgba(255,255,255,.36); }
+.tile-led-toggle.active{ color:#08110b; background:#2bff6a; border-color:#2bff6a; box-shadow:0 0 8px rgba(43,255,106,.65); }
+.tile-led-toggle:disabled{ opacity:.55; cursor:wait; }
+.panel-c1 .tile-led-toggle{ display:none; }
+
 
 /* hover fără transform – ca să nu stricăm pozițiile */
 .hdd-tile:hover{ outline-color: rgba(255,255,255,.12); }
@@ -784,6 +806,15 @@ foreach ($files as $file)
 			>
           <div class="hdd-content">
             <span class="led-dot" aria-hidden="true"></span>
+            <?php if ($has && $cmd_on !== '' && $cmd_off !== ''): ?>
+              <button type="button"
+                      class="tile-led-toggle"
+                      data-state="off"
+                      data-on="<?php echo htmlspecialchars($cmd_on); ?>"
+                      data-off="<?php echo htmlspecialchars($cmd_off); ?>"
+                      title="<?php echo tdm_h('button.led_toggle'); ?>"
+                      onclick="toggleTileLed(event, this)"><?php echo tdm_h('button.led_short'); ?></button>
+            <?php endif; ?>
             <div class="hdd-overlay">
               <p class="slot-label"><?php echo $slotLabelHtml; ?></p>
               <p class="name-label"><?php echo $labelText; ?></p>
@@ -875,7 +906,6 @@ foreach ($files as $file)
         <li><?php echo tdm_h('smart.criteria.read_fail'); ?></li>
         <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
         <li><?php echo tdm_h('smart.criteria.ata_errors'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.crc_errors'); ?></li>
       </ul>
     </li>
   </ul>
@@ -1107,6 +1137,11 @@ var TDM_I18N = <?php echo json_encode(array(
   'js.no_led_command' => tdm_t('js.no_led_command'),
   'js.executed' => tdm_t('js.executed'),
   'js.http_error' => tdm_t('js.http_error'),
+  'js.led_busy' => tdm_t('js.led_busy'),
+  'js.led_on_short' => tdm_t('js.led_on_short'),
+  'js.led_off_short' => tdm_t('js.led_off_short'),
+  'js.led_turn_on' => tdm_t('js.led_turn_on'),
+  'js.led_turn_off' => tdm_t('js.led_turn_off'),
   'js.refresh_error' => tdm_t('js.refresh_error'),
   'js.completed' => tdm_t('js.completed'),
   'js.api_load_error' => tdm_t('js.api_load_error'),
@@ -1205,23 +1240,54 @@ $(function(){
 
 
 <script>
-  function controlLed(cmd) {
+  function controlLed(cmd, opts) {
+    opts = opts || {};
     if (!cmd) { alert(tdmMsg('js.no_led_command')); return; }
 
     // ia butoanele DIN NOU în acest scope
     var btnOn  = document.getElementById('btnOn');
     var btnOff = document.getElementById('btnOff');
-    [btnOn, btnOff].forEach(b => b && (b.disabled = true));
+    var buttons = [btnOn, btnOff];
+    if (opts.button) buttons.push(opts.button);
+    buttons.forEach(b => b && (b.disabled = true));
 
-    $.post('led_control.php', { cmd: cmd })
-      .done(function(resp){ alert(resp || tdmMsg('js.executed', {cmd: cmd})); })
+    return $.post('led_control.php', { cmd: cmd })
+      .done(function(resp){
+        if (!opts.silentSuccess) {
+          alert(resp || tdmMsg('js.executed', {cmd: cmd}));
+        }
+      })
       .fail(function(xhr){ alert(tdmMsg('js.http_error', {status: xhr.status}) + '\n' + (xhr.responseText||'')); })
       .always(function(){
-        [btnOn, btnOff].forEach(b => b && (b.disabled = false));
+        buttons.forEach(b => b && (b.disabled = false));
       });
   }
 
   function runLed(cmd) { controlLed(cmd); }
+
+  function toggleTileLed(event, btn) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    var wasOn = btn.dataset.state === 'on';
+    var cmd = wasOn ? btn.dataset.off : btn.dataset.on;
+    var previousText = btn.textContent;
+    btn.textContent = tdmMsg('js.led_busy');
+
+    controlLed(cmd, { button: btn, silentSuccess: true })
+      .done(function(){
+        var nowOn = !wasOn;
+        btn.dataset.state = nowOn ? 'on' : 'off';
+        btn.classList.toggle('active', nowOn);
+        btn.textContent = nowOn ? tdmMsg('js.led_on_short') : tdmMsg('js.led_off_short');
+        btn.title = nowOn ? tdmMsg('js.led_turn_off') : tdmMsg('js.led_turn_on');
+      })
+      .fail(function(){
+        btn.textContent = previousText || tdmMsg('js.led_off_short');
+      });
+  }
 </script>
 
 

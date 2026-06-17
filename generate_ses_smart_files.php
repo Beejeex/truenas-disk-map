@@ -247,7 +247,7 @@ function get_smart_report($dev)
 
     // 3) SUSPECT: non-critical counters that should be reviewed.
     // Load_Cycle_Count is shown as info only; it is too noisy to mark a disk bad by itself.
-    if ($details['read_failure'] || $details['reallocated'] > 0 || $details['ata_errors'] > 0 || $details['crc_errors'] > 0)
+    if ($details['read_failure'] || $details['reallocated'] > 0 || $details['ata_errors'] > 0)
     {
         return array('status' => tdm_format_smart_status("SUSPECT", $details), 'details' => $details);
     }

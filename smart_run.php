@@ -13,9 +13,11 @@ if ($dev === '' || !tdm_is_safe_dev_path($dev)) {
 
 $code = 0;
 $output = tdm_run_command(array("sudo", "/usr/local/sbin/tdm-smartctl-read", "-x", $dev), $code);
-if ($code !== 0)
+if ($code !== 0 && trim($output) === "")
 {
     http_response_code(500);
+    echo "smartctl exited with code " . $code . " and returned no output.";
+    exit;
 }
 
 echo $output;
