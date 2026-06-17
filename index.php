@@ -546,32 +546,34 @@ html.theme-light{
   background-size: 100% 100%;
 }
 
-/* ====== IMAGINI ======
-   C_0 uses horizontal disk images.
+/* ====== BAY IMAGES ======
+   Two base images: 01hex2026.png (2309x681) for populated drives,
+   01blank2026.png (2309x681) for empty slots.
+   C_1 rotates via ::before pseudo-element — dimensions are swapped so
+   the rotated image fills the portrait tile exactly (both have 3.39:1 ratio).
 */
-.hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK.png'); }
-.hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
-.hdd-tile.smart-danger .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
-.hdd-tile.smart-interface .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
-.hdd-tile.smart-maintenance .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
-.hdd-tile.smart-unknown .hdd-content{ background-image:url('src/img/HDD_WARNING.png'); }
-.hdd-tile.smart-bad   .hdd-content{ background-image:url('src/img/HDD_ISSUE_PROBLEMS.png'); }
-.hdd-tile.smart-spare .hdd-content{ background-image:url('src/img/HDD_SPARE.png'); }
-.hdd-tile.empty       .hdd-content{ background-image:url('src/img/HDD_SLOT_EMPTY.png'); }
-.hdd-tile.smart-unused  .hdd-content{ background-image:url('src/img/HDD_UNUSED.png'); }
+.hdd-tile::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url('src/img/01hex2026.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  z-index: 0;
+}
+.hdd-tile.empty::before {
+  background-image: url('src/img/01blank2026.png');
+}
 
-
-/* C_1 uses pre-rotated portrait disk images. */
-.panel-c1 .hdd-tile.smart-ok    .hdd-content{ background-image:url('src/img/HDD_OK_rotated.png'); }
-.panel-c1 .hdd-tile.smart-warn  .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
-.panel-c1 .hdd-tile.smart-danger .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
-.panel-c1 .hdd-tile.smart-interface .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
-.panel-c1 .hdd-tile.smart-maintenance .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
-.panel-c1 .hdd-tile.smart-unknown .hdd-content{ background-image:url('src/img/HDD_WARNING_rotated.png'); }
-.panel-c1 .hdd-tile.smart-bad   .hdd-content{ background-image:url('src/img/HDD_ISSUE_PROBLEMS_rotated.png'); }
-.panel-c1 .hdd-tile.smart-spare .hdd-content{ background-image:url('src/img/HDD_SPARE_rotated.png'); }
-.panel-c1 .hdd-tile.empty       .hdd-content{ background-image:url('src/img/HDD_SLOT_EMPTY_rotated.png'); }
-.panel-c1 .hdd-tile.smart-unused .hdd-content{ background-image:url('src/img/HDD_UNUSED_rotated.png'); }
+.panel-c1 .hdd-tile::before {
+  /* Swap width/height so the landscape image, when rotated -90deg,
+     fills the portrait tile exactly. 685/202 = tile height/width ratio. */
+  width:  calc(685 / 202 * 100%);
+  height: calc(202 / 685 * 100%);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
 
 
 /* ====== ROTATED TEXT FOR C_1 ONLY ======
@@ -1286,7 +1288,6 @@ html.theme-light .btn-outline-secondary{
         <li><?php echo tdm_h('smart.criteria.read_failure'); ?></li>
         <li><?php echo tdm_h('smart.criteria.reallocated_critical'); ?></li>
         <li><?php echo tdm_h('smart.criteria.multiple_media'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.temp_critical'); ?></li>
       </ul>
     </div>
     <div class="criteria-card">
@@ -1294,7 +1295,6 @@ html.theme-light .btn-outline-secondary{
       <ul>
         <li><?php echo tdm_h('smart.criteria.reallocated_danger'); ?></li>
         <li><?php echo tdm_h('smart.criteria.retry_danger'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.temp_danger'); ?></li>
       </ul>
     </div>
     <div class="criteria-card">
@@ -1302,7 +1302,6 @@ html.theme-light .btn-outline-secondary{
       <ul>
         <li><?php echo tdm_h('smart.criteria.reallocated_any'); ?></li>
         <li><?php echo tdm_h('smart.criteria.retry_any'); ?></li>
-        <li><?php echo tdm_h('smart.criteria.temp_suspect'); ?></li>
       </ul>
     </div>
     <div class="criteria-card">
