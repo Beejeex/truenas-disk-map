@@ -226,12 +226,6 @@ Install the app, then open:
 http://TRUENAS_IP:8585
 ```
 
-Example:
-
-```text
-http://172.20.1.200:8585
-```
-
 After the page loads, click `Refresh` to generate the disk map files.
 
 ## Deployment Option 2: TrueNAS Shell
