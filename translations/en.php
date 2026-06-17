@@ -11,6 +11,9 @@ return array(
     'status.ok' => 'OK',
     'refresh.button' => 'Refresh (takes a few minutes)',
     'api.button' => 'API Settings',
+    'theme.light' => 'Light',
+    'theme.dark' => 'Dark',
+    'theme.toggle' => 'Toggle light/dark theme',
 
     'display.options' => 'Display options',
     'display.hide_full_pool_names' => 'Hide full pool names',

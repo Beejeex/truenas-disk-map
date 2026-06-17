@@ -294,6 +294,16 @@ foreach ($files as $file)
 
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 
+<script>
+(function(){
+  try {
+    if (localStorage.getItem('tdmTheme') === 'light') {
+      document.documentElement.classList.add('theme-light');
+    }
+  } catch (e) {}
+})();
+</script>
+
 <style>
 
 
@@ -357,19 +367,48 @@ foreach ($files as $file)
 :root{
   --c1-scale: calc(685 / 202);   /* ≈ 3.389 */
   --c1-unscale: calc(202 / 685); /* ≈ 0.295 – inversul */
+  --bg: #1b1e23;
+  --panel: #232730;
+  --panel-2: #1f2330;
+  --text: #e6e6e6;
+  --title: #f0f0f0;
+  --muted: #8d97a5;
+  --border: rgba(255,255,255,0.08);
+  --pill-bg: rgba(255,255,255,.06);
+  --pill-text: #cbd3da;
+  --pre-bg: #0f121a;
+  --pre-text: #cfe4ff;
+}
+
+html.theme-light{
+  --bg: #eef2f7;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --text: #172033;
+  --title: #101827;
+  --muted: #657082;
+  --border: rgba(15,23,42,0.13);
+  --pill-bg: #eef2f7;
+  --pill-text: #465568;
+  --pre-bg: #f6f8fb;
+  --pre-text: #172033;
 }
 
 
 
-  body { background: #1b1e23; color: #e6e6e6; }
+  body { background: var(--bg); color: var(--text); }
   .page-wrap { min-height: 100vh; padding: 24px 0 48px 0; }
   .nas-panel {
-    background: #232730; border-radius: 14px;
+    background: var(--panel); border-radius: 14px;
     box-shadow: 0 12px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.03);
     padding: 18px; margin-bottom: 26px;
   }
-  .nas-title { font-weight: 600; letter-spacing: .3px; color: #f0f0f0; }
-  .file-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.06); color: #cbd3da; }
+  .nas-title { font-weight: 600; letter-spacing: .3px; color: var(--title); }
+  .file-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--pill-bg); color: var(--pill-text); }
+  .top-status-bar, .display-options-bar{
+    background: var(--panel-2) !important;
+    border-color: var(--border) !important;
+  }
 
   /* Grid: fără înălțime fixă – tile-ul decide dimensiunea */
   .nas-grid { display: grid; grid-row-gap: 14px; grid-column-gap: 14px; }
@@ -498,6 +537,58 @@ foreach ($files as $file)
 .detail-grid strong{ color:#f0f3f7; }
 .detail-grid span{ min-width:0; overflow-wrap:anywhere; }
 
+html.theme-light .nas-panel{
+  box-shadow: 0 10px 24px rgba(15,23,42,0.09), inset 0 0 0 1px rgba(15,23,42,0.05);
+}
+html.theme-light .legend-item,
+html.theme-light .text-light,
+html.theme-light .custom-control-label,
+html.theme-light label,
+html.theme-light .modal-content{
+  color: var(--text) !important;
+}
+html.theme-light .text-muted{ color: var(--muted) !important; }
+html.theme-light .detail-grid strong{ color: var(--title); }
+html.theme-light .modal-content{
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+html.theme-light .modal-header,
+html.theme-light .modal-footer{
+  border-color: var(--border);
+}
+html.theme-light .modal .close{
+  color: var(--title) !important;
+  text-shadow:none;
+}
+html.theme-light #regenOutput,
+html.theme-light #smartOutput{
+  background: var(--pre-bg) !important;
+  color: var(--pre-text) !important;
+  border-color: var(--border) !important;
+}
+html.theme-light #regenSpinner{
+  background: rgba(248,250,252,.72) !important;
+}
+html.theme-light .form-control,
+html.theme-light .custom-select{
+  background:#fff;
+  color:#172033;
+  border-color:#c8d2df;
+}
+html.theme-light .btn-outline-light{
+  color:#172033;
+  border-color:#7b8798;
+}
+html.theme-light .btn-outline-light:hover{
+  background:#172033;
+  color:#fff;
+}
+html.theme-light .btn-outline-secondary{
+  color:#39475c;
+  border-color:#9aa6b2;
+}
+
 </style>
 </head>
 <body>
@@ -505,7 +596,7 @@ foreach ($files as $file)
 <div class="container">
 
 
-<div class="d-flex align-items-center justify-content-between mb-2"
+<div class="top-status-bar d-flex align-items-center justify-content-between mb-2"
      style="background:#1f2330;border-radius:10px;padding:8px 12px; border:1px solid rgba(255,255,255,0.06)">
   <div class="text-light">
     <strong><?php echo tdm_h('last_update.label'); ?></strong>:
@@ -527,11 +618,15 @@ foreach ($files as $file)
   <button id="btnApiSettings" type="button" class="btn btn-sm btn-outline-light ml-2">
     <?php echo tdm_h('api.button'); ?>
   </button>
+  <button id="btnTheme" type="button" class="btn btn-sm btn-outline-light ml-2"
+          aria-pressed="false" title="<?php echo tdm_h('theme.toggle'); ?>">
+    <?php echo tdm_h('theme.light'); ?>
+  </button>
 
 </div>
 
 
-<div class="d-flex align-items-center justify-content-between mb-3"
+<div class="display-options-bar d-flex align-items-center justify-content-between mb-3"
      style="background:#232730;border-radius:10px;padding:10px 12px">
   <div class="text-light font-weight-bold"><?php echo tdm_h('display.options'); ?></div>
 
@@ -1150,6 +1245,8 @@ var TDM_I18N = <?php echo json_encode(array(
   'js.api_disabled' => tdm_t('js.api_disabled'),
   'api.status_configured' => tdm_t('api.status_configured'),
   'api.status_not_configured' => tdm_t('api.status_not_configured'),
+  'theme.light' => tdm_t('theme.light'),
+  'theme.dark' => tdm_t('theme.dark'),
   'smart.output.title' => tdm_t('smart.output.title')
 ), JSON_UNESCAPED_SLASHES); ?>;
 
@@ -1161,6 +1258,34 @@ function tdmMsg(key, vars) {
   });
   return text;
 }
+
+function setThemeMode(mode) {
+  var light = mode === 'light';
+  document.documentElement.classList.toggle('theme-light', light);
+  try {
+    if (light) localStorage.setItem('tdmTheme', 'light');
+    else localStorage.removeItem('tdmTheme');
+  } catch (e) {}
+
+  var btn = document.getElementById('btnTheme');
+  if (btn) {
+    btn.textContent = light ? tdmMsg('theme.dark') : tdmMsg('theme.light');
+    btn.setAttribute('aria-pressed', light ? 'true' : 'false');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var light = document.documentElement.classList.contains('theme-light');
+  setThemeMode(light ? 'light' : 'dark');
+
+  var btn = document.getElementById('btnTheme');
+  if (btn) {
+    btn.addEventListener('click', function(){
+      var next = document.documentElement.classList.contains('theme-light') ? 'dark' : 'light';
+      setThemeMode(next);
+    });
+  }
+});
 
 function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters) {
   meta = meta || {};
