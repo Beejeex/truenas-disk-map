@@ -36,14 +36,13 @@ if ($api_url === '' || $api_key === '') {
 }
 
 // ── Test the connection ─────────────────────────────────────────────
-// Try /api/v2.0/disk first — the actual endpoint the app uses and
-// the one a Readonly Admin role has access to.
+// Tests both /disk and /pool and reports counts + topology summary.
 function tdm_api_call($url, $api_key, $verify_tls) {
     $ch = curl_init();
     curl_setopt_array($ch, [
         CURLOPT_URL            => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_TIMEOUT        => 15,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_HTTPHEADER     => [
             'Authorization: Bearer ' . $api_key,
@@ -59,72 +58,85 @@ function tdm_api_call($url, $api_key, $verify_tls) {
     return [$http_code, $response, $curl_error];
 }
 
-// Test 1: /api/v2.0/disk (what the app actually needs, works with Readonly Admin)
-list($code1, $body1, $err1) = tdm_api_call($api_url . '/disk', $api_key, $verify_tls);
-
-if ($err1) {
-    $msg = $err1;
-    if (stripos($err1, 'certificate') !== false || stripos($err1, 'SSL') !== false) {
-        $msg .= ' (Try enabling "Verify TLS certificate" or check the URL.)';
-    }
-    echo json_encode(['ok' => false, 'message' => $msg, 'status_code' => null]);
+// ── Test /disk ──────────────────────────────────────────────────────
+list($diskCode, $diskBody, $diskErr) = tdm_api_call($api_url . '/disk', $api_key, $verify_tls);
+if ($diskErr) {
+    echo json_encode(['ok' => false, 'message' => 'Connection error: ' . $diskErr]);
     exit;
 }
 
-if ($code1 >= 200 && $code1 < 300) {
-    // Success! Also try system/info for hostname/version
-    $hostname = '';
-    $version  = '';
-    list($code2, $body2) = tdm_api_call($api_url . '/system/info', $api_key, $verify_tls);
-    if ($code2 >= 200 && $code2 < 300) {
-        $data = @json_decode($body2, true);
-        $hostname = isset($data['hostname']) ? $data['hostname'] : '';
-        $version  = isset($data['version'])  ? $data['version']  : '';
-    }
-    $extra = $hostname ? " (host: {$hostname}" . ($version ? ", version: {$version}" : '') . ')' : '';
-    echo json_encode([
-        'ok'          => true,
-        'message'     => 'Connected successfully' . $extra,
-        'status_code' => $code1,
-    ]);
+$diskCount = null;
+if ($diskCode >= 200 && $diskCode < 300) {
+    $disks = @json_decode($diskBody, true);
+    if (is_array($disks)) $diskCount = count($disks);
+}
+
+// ── Test /pool ──────────────────────────────────────────────────────
+list($poolCode, $poolBody, $poolErr) = tdm_api_call($api_url . '/pool', $api_key, $verify_tls);
+if ($poolErr) {
+    echo json_encode(['ok' => false, 'message' => '/disk OK but /pool error: ' . $poolErr, 'disk_count' => $diskCount]);
     exit;
 }
 
-// /disk returned non-2xx. Try just the API root to diagnose.
-if ($code1 === 401 || $code1 === 403) {
-    // Could be the key, or could be the endpoint requires higher privileges.
-    // Try a bare minimum endpoint.
-    list($codeRoot, $bodyRoot) = tdm_api_call(rtrim($api_url, '/'), $api_key, $verify_tls);
-
-    if ($codeRoot === 401 || $codeRoot === 403) {
-        // Both endpoints rejected — it's likely the key itself.
-        $body_sample = $bodyRoot ? ': ' . substr(strip_tags($bodyRoot), 0, 120) : '';
-        echo json_encode([
-            'ok'          => false,
-            'message'     => 'Authentication failed (HTTP ' . $code1 . '). The API key was rejected.' . $body_sample,
-            'status_code' => $code1,
-        ]);
-    } elseif ($codeRoot >= 200 && $codeRoot < 300) {
-        // Root works but /disk doesn't — permissions issue on the endpoint.
-        echo json_encode([
-            'ok'          => false,
-            'message'     => 'API key is valid but lacks permission to list disks (HTTP ' . $code1 . '). Check that the user has the Readonly Admin role.',
-            'status_code' => $code1,
-        ]);
-    } else {
-        echo json_encode([
-            'ok'          => false,
-            'message'     => 'API key works at root but /disk returned HTTP ' . $code1 . '.',
-            'status_code' => $code1,
-        ]);
+$poolCount = null;
+$poolDiskCount = 0;
+$poolNames = [];
+if ($poolCode >= 200 && $poolCode < 300) {
+    $pools = @json_decode($poolBody, true);
+    if (is_array($pools)) {
+        $poolCount = count($pools);
+        foreach ($pools as $pool) {
+            $pn = isset($pool['name']) ? $pool['name'] : '(unnamed)';
+            $vdevs = [];
+            if (isset($pool['topology']['data']) && is_array($pool['topology']['data'])) {
+                foreach ($pool['topology']['data'] as $vdev) {
+                    $vt = isset($vdev['type']) ? strtoupper($vdev['type']) : 'DATA';
+                    $c = isset($vdev['children']) && is_array($vdev['children']) ? count($vdev['children']) : 0;
+                    $poolDiskCount += $c;
+                    $vdevs[] = $c ? "$vt×$c" : $vt;
+                }
+            }
+            $poolNames[] = $pn . ($vdevs ? ' (' . implode(', ', $vdevs) . ')' : '');
+        }
     }
-    exit;
 }
 
-// Non-auth error (404, 500, etc.)
-$body = $body1 ? substr($body1, 0, 200) : '(empty response)';
+// ── Test /system/info for hostname ──────────────────────────────────
+$hostname = '';
+list($infoCode, $infoBody) = tdm_api_call($api_url . '/system/info', $api_key, $verify_tls);
+if ($infoCode >= 200 && $infoCode < 300) {
+    $info = @json_decode($infoBody, true);
+    $hostname = isset($info['hostname']) ? $info['hostname'] : '';
+}
+
+// ── Build response ──────────────────────────────────────────────────
+$parts = [];
+if ($hostname) $parts[] = "host: $hostname";
+if ($diskCount !== null) $parts[] = "$diskCount disks";
+if ($poolCount !== null) $parts[] = "$poolCount pools ($poolDiskCount data disks)";
+
+$allOk = ($diskCode >= 200 && $diskCode < 300) && ($poolCode >= 200 && $poolCode < 300);
+
+if ($allOk) {
+    $msg = 'All OK — ' . implode(', ', $parts);
+    if ($poolNames) $msg .= "\nPools: " . implode(' | ', $poolNames);
+    if ($diskCount > 0 && $poolCount > 0 && $poolDiskCount === 0) {
+        $msg .= "\nWARNING: pools found but no topology data extracted. API format may differ. Run Refresh and check output.";
+    }
+} else {
+    $errs = [];
+    if ($diskCode < 200 || $diskCode >= 300) $errs[] = "/disk HTTP $diskCode";
+    if ($poolCode < 200 || $poolCode >= 300) $errs[] = "/pool HTTP $poolCode";
+    $msg = 'FAILED: ' . implode(', ', $errs);
+    if ($parts) $msg .= ' — ' . implode(', ', $parts);
+}
+
 echo json_encode([
-    'ok'          => false,
-    'message'     => 'Unexpected response from /api/v2.0/disk (HTTP ' . $code1 . '): ' . $body,
-    'status_code' => $code1,
+    'ok'           => $allOk,
+    'message'      => $msg,
+    'disk_count'   => $diskCount,
+    'pool_count'   => $poolCount,
+    'pool_disks'   => $poolDiskCount,
+    'disk_code'    => $diskCode,
+    'pool_code'    => $poolCode,
 ]);

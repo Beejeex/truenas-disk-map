@@ -2098,9 +2098,9 @@ $(function(){
     })
     .done(function(data){
       if (data && data.ok) {
-        alert(tdmMsg('api.test_ok') + '\n' + (data.message || ''));
+        alert(data.message || tdmMsg('api.test_ok'));
       } else {
-        alert(tdmMsg('api.test_fail') + '\n' + ((data && data.message) || 'Unknown error'));
+        alert((data && data.message) || tdmMsg('api.test_fail'));
       }
     })
     .fail(function(xhr){
