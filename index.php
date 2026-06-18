@@ -632,8 +632,9 @@ html.theme-light{
 .slot-label{
   position:absolute; top:8px; left:10px;
   z-index:3;
-  font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef;
+  font-size:11px; font-weight:700; letter-spacing:.3px; text-transform:uppercase; margin:0; color:#e9ecef;
   text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  white-space:nowrap;
 }
 .vdev-label{
   display:inline-block;
@@ -642,11 +643,16 @@ html.theme-light{
   font-size:10px;
   font-weight:800;
   letter-spacing:.3px;
-  background:rgba(45,168,255,.25);
-  color:#7cc8ff;
   vertical-align:middle;
   margin-left:2px;
 }
+/* VDEV colors by index */
+.vdev-label.vdev-c0{ background:rgba(45,168,255,.25); color:#7cc8ff; }
+.vdev-label.vdev-c1{ background:rgba(34,197,94,.25); color:#4ade80; }
+.vdev-label.vdev-c2{ background:rgba(234,179,8,.25); color:#facc15; }
+.vdev-label.vdev-c3{ background:rgba(168,85,247,.25); color:#c084fc; }
+.vdev-label.vdev-c4{ background:rgba(249,115,22,.25); color:#fb923c; }
+.vdev-label.vdev-c5{ background:rgba(236,72,153,.25); color:#f472b6; }
 .vdev-label.vdev-spare{ background:rgba(233,236,239,.18); color:#cbd3da; }
 .vdev-label.vdev-unused{ background:rgba(45,168,255,.35); color:#2da8ff; }
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -923,8 +929,8 @@ html.theme-light .btn-outline-secondary{
   <span class="app-version"><?php echo tdm_h('app.version', array('version' => $app_version)); ?></span>
 </div>
 
-<div class="top-status-bar d-flex align-items-center justify-content-between mb-2 p-2">
-  <div class="top-status-meta text-light">
+<div class="top-status-bar d-flex align-items-center justify-content-between mb-2 p-2" style="flex-wrap:wrap; row-gap:6px;">
+  <div class="top-status-meta text-light" style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;">
     <strong><?php echo tdm_h('last_update.label'); ?></strong>:
     <span><?php echo htmlspecialchars($latest_dt); ?></span>
     <span class="text-muted">(<?php echo tdm_h('last_update.ago', array('age' => $age_text)); ?>)</span>
@@ -935,11 +941,11 @@ html.theme-light .btn-outline-secondary{
     <?php endif; ?>
     <span class="text-muted"><?php echo tdm_h('last_update.files', array('count' => (int)$files_count)); ?></span>
     <?php if ($api_configured_but_no_pools): ?>
-      <span style="color:#f59e0b; font-weight:700; margin-left:8px;">API connected but no pool data — run Refresh</span>
+      <span class="badge" style="background:rgba(245,158,11,.2); color:#f59e0b; font-size:10px; white-space:nowrap;">No pool data — run Refresh</span>
     <?php endif; ?>
   </div>
 
-  <div class="top-status-actions">
+  <div class="top-status-actions" style="flex-shrink:0;">
     <span id="autoRefreshBadge" class="badge" style="display:none; background:#1a3a2a; color:#4ade80; font-size:11px; padding:4px 8px; border-radius:5px; margin-right:4px;">
       <?php echo tdm_h('refresh.auto.running'); ?>
     </span>
@@ -1170,8 +1176,8 @@ html.theme-light .btn-outline-secondary{
 			// Short pool name for the grid.
 			$pool_name_short = $pool_name;
 			if ($pool_name_short !== '' && $pool_name_short !== 'UNUSED') {
-				if (strlen($pool_name_short) > 5) {
-					$pool_name_short = substr($pool_name_short, 0, 5) . '...';
+				if (strlen($pool_name_short) > 4) {
+					$pool_name_short = substr($pool_name_short, 0, 4);
 				}
 			}
 
@@ -1184,13 +1190,13 @@ html.theme-light .btn-outline-secondary{
 					. '<span class="pool-full">'  . htmlspecialchars($pool_name)        . '</span>'
 					. ']';
 			}
-			// VDEV type label
+			// VDEV type label (color-coded by index)
 			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short])) {
 				$vd = $vdev_by_disk[$dev_short];
 				$vdev_type = isset($vd['vdev_type']) ? $vd['vdev_type'] : '';
 				$vdev_idx  = isset($vd['vdev_index']) ? (int)$vd['vdev_index'] : 0;
 				if ($vdev_type !== '' && $vdev_type !== 'DATA') {
-					$slotLabelHtml .= ' <span class="vdev-label">' . htmlspecialchars($vdev_type) . '-' . $vdev_idx . '</span>';
+					$slotLabelHtml .= ' <span class="vdev-label vdev-c' . ($vdev_idx % 6) . '">' . htmlspecialchars($vdev_type) . '-' . $vdev_idx . '</span>';
 				}
 			}
 			if ($is_spare) {
