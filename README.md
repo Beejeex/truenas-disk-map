@@ -493,6 +493,25 @@ Regenerate files from the shell:
 sudo docker exec -it truenas_interface bash -lc 'php /var/www/html/run_regen.php'
 ```
 
+### Automatic background refresh (self-contained, no host cron needed)
+
+The container runs its own internal scheduler — a lightweight PHP daemon that checks every 60 seconds and triggers a refresh when the configured interval has elapsed. **No host cron setup required.**
+
+**How it works:**
+
+1. `daemon.php` runs as a background process inside the container, started automatically by the entrypoint.
+2. Every 60 seconds it calls `scheduler.php`, which checks `disk_data/.cron_config.json` and triggers `run_regen.php` (CLI mode) only when the configured interval has elapsed.
+3. A lock file prevents overlapping runs. The refresh runs **outside** the web server — the website stays fully responsive.
+4. The frontend polls `refresh_status.php` every 30s and shows an "Auto-refresh running…" badge when active.
+5. **Configure it from the UI** — click the ⚙ gear icon next to the Refresh button to enable/disable and set the interval (5 min to 24 hours).
+
+**It just works** — start the container, open the UI, click ⚙, enable, pick your interval. The daemon log is at `disk_data/.daemon.log` if you ever need to check it.
+
+**Manual CLI refresh** (still works):
+
+```bash
+sudo docker exec -it truenas_interface bash -lc 'php /var/www/html/run_regen.php'
+
 Generated files and diagnostics are in:
 
 ```text

@@ -907,6 +907,12 @@ html.theme-light .btn-outline-secondary{
   </div>
 
   <div class="top-status-actions">
+    <span id="autoRefreshBadge" class="badge" style="display:none; background:#1a3a2a; color:#4ade80; font-size:11px; padding:4px 8px; border-radius:5px; margin-right:4px;">
+      <?php echo tdm_h('refresh.auto.running'); ?>
+    </span>
+    <button id="btnCronConfig" type="button" class="btn btn-sm btn-outline-info" title="<?php echo tdm_h('cron.title'); ?>">
+      &#9881;
+    </button>
     <button id="btnRegen" type="button" class="btn btn-sm btn-outline-info">
       <?php echo tdm_h('refresh.button'); ?>
     </button>
@@ -1565,6 +1571,53 @@ html.theme-light .btn-outline-secondary{
 </div>
 
 
+<!-- Modal Cron Config -->
+<div class="modal fade" id="cronConfigModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content" style="background:#1f2330;color:#e6e6e6;border:1px solid rgba(255,255,255,0.08);">
+      <div class="modal-header">
+        <h5 class="modal-title"><?php echo tdm_h('cron.title'); ?></h5>
+        <button type="button" class="close text-light" data-dismiss="modal" aria-label="<?php echo tdm_h('modal.close'); ?>">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <form id="cronConfigForm">
+          <div class="custom-control custom-switch mb-3">
+            <input id="cronEnabled" name="enabled" type="checkbox" class="custom-control-input">
+            <label class="custom-control-label" for="cronEnabled"><?php echo tdm_h('cron.enabled'); ?></label>
+          </div>
+
+          <div class="form-group">
+            <label for="cronInterval"><?php echo tdm_h('cron.interval'); ?></label>
+            <select id="cronInterval" name="interval_minutes" class="custom-select custom-select-sm">
+              <option value="5"><?php echo tdm_h('cron.interval.5m'); ?></option>
+              <option value="15"><?php echo tdm_h('cron.interval.15m'); ?></option>
+              <option value="30"><?php echo tdm_h('cron.interval.30m'); ?></option>
+              <option value="60"><?php echo tdm_h('cron.interval.1h'); ?></option>
+              <option value="120"><?php echo tdm_h('cron.interval.2h'); ?></option>
+              <option value="180"><?php echo tdm_h('cron.interval.3h'); ?></option>
+              <option value="360"><?php echo tdm_h('cron.interval.6h'); ?></option>
+              <option value="720" selected><?php echo tdm_h('cron.interval.12h'); ?></option>
+              <option value="1440"><?php echo tdm_h('cron.interval.24h'); ?></option>
+            </select>
+          </div>
+
+          <div class="mt-2 small text-muted">
+            <?php echo tdm_h('cron.note'); ?>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button id="cronSave" type="button" class="btn btn-success btn-sm"><?php echo tdm_h('button.save'); ?></button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal"><?php echo tdm_h('modal.close'); ?></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- JS: jQuery + Popper + Bootstrap 4 -->
@@ -1596,7 +1649,10 @@ var TDM_I18N = <?php echo json_encode(array(
   'api.status_not_configured' => tdm_t('api.status_not_configured'),
   'theme.light' => tdm_t('theme.light'),
   'theme.dark' => tdm_t('theme.dark'),
-  'smart.output.title' => tdm_t('smart.output.title')
+  'smart.output.title' => tdm_t('smart.output.title'),
+  'cron.saved' => tdm_t('cron.saved'),
+  'cron.load_error' => tdm_t('cron.load_error'),
+  'cron.save_error' => tdm_t('cron.save_error')
 ), JSON_UNESCAPED_SLASHES); ?>;
 
 function tdmMsg(key, vars) {
@@ -2079,6 +2135,89 @@ Version <?php echo htmlspecialchars($app_version); ?><br>
 SES + SMART + TrueNAS
 </div>
 
+<script>
+// ── Auto-refresh status polling ────────────────────────────────────
+// Polls refresh_status.php every 30s to show if a background
+// (cron-triggered) refresh is running. Does NOT block the UI.
+(function(){
+  var $badge = $('#autoRefreshBadge');
+  var POLL_INTERVAL = 30000; // 30 seconds
+
+  function poll(){
+    $.getJSON('refresh_status.php')
+      .done(function(data){
+        if (data && data.running) {
+          $badge.show();
+        } else {
+          $badge.hide();
+        }
+      })
+      .fail(function(){
+        // Silently ignore — endpoint may not exist yet
+      });
+  }
+
+  // First poll after a short delay, then every POLL_INTERVAL
+  setTimeout(function(){
+    poll();
+    setInterval(poll, POLL_INTERVAL);
+  }, 5000);
+})();
+</script>
+
+<script>
+// ── Cron config modal ───────────────────────────────────────────────
+(function(){
+  var $modal  = $('#cronConfigModal');
+  var $open   = $('#btnCronConfig');
+  var $save   = $('#cronSave');
+  var $enabled = $('#cronEnabled');
+  var $interval = $('#cronInterval');
+
+  function loadConfig(){
+    $save.prop('disabled', true);
+    $.getJSON('cron_config.php')
+      .done(function(data){
+        $enabled.prop('checked', !!data.enabled);
+        $interval.val(data.interval_minutes || 720);
+      })
+      .fail(function(xhr){
+        alert(tdmMsg('cron.load_error') + '\n' + (xhr.responseText || xhr.status));
+      })
+      .always(function(){ $save.prop('disabled', false); });
+  }
+
+  function saveConfig(){
+    $save.prop('disabled', true);
+    $.ajax({
+      url: 'cron_config.php',
+      method: 'POST',
+      contentType: 'application/json',
+      dataType: 'json',
+      data: JSON.stringify({
+        enabled: $enabled.is(':checked'),
+        interval_minutes: parseInt($interval.val(), 10) || 720
+      })
+    })
+    .done(function(){
+      alert(tdmMsg('cron.saved'));
+      $modal.modal('hide');
+    })
+    .fail(function(xhr){
+      var msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : (xhr.responseText || xhr.status);
+      alert(tdmMsg('cron.save_error') + '\n' + msg);
+    })
+    .always(function(){ $save.prop('disabled', false); });
+  }
+
+  $open.on('click', function(){
+    $modal.modal('show');
+    loadConfig();
+  });
+
+  $save.on('click', saveConfig);
+})();
+</script>
 
 </body>
 </html>
