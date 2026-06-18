@@ -360,14 +360,8 @@ foreach ($files as $file)
         ];
     }
 
-    // Determine layout: 3.5" TB drives → 4 cols (horizontal), small/SSD → 15 cols
-    $tileCount = count($tiles);
-    $cols = 15; // default vertical
-    if (stripos($first_capacity, 'TB') !== false) {
-        $cols = 4; // 3.5" horizontal
-    } elseif ($tileCount <= 4) {
-        $cols = 4; // small enclosure
-    }
+    // Determine layout: 3.5" TB drives → 4 cols horizontal, everything else → 15 cols vertical
+    $cols = (stripos($first_capacity, 'TB') !== false) ? 4 : 15;
 
     // Normalize slots to start at 0 (physical bay numbering)
     if ($min_slot < PHP_INT_MAX) {
@@ -1068,9 +1062,9 @@ html.theme-light .btn-outline-secondary{
         $ctrl = (int)$panel['controller'];
     }
 
-    // order
+    // order (column-wise for landscape, row-wise for portrait)
     $order = array();
-    if ($ctrl === 1) {
+    if ($cols > 8) {
         $order = build_display_order_rowwise_reversed($total, $cols);
     } else {
         $order = build_display_order_colwise_top_high($total, $cols);
@@ -1099,17 +1093,14 @@ html.theme-light .btn-outline-secondary{
         }
     }
 
-    // Panel class.
+    // Panel class (portrait layout for many columns)
     $panelClass = '';
-    if ($ctrl === 1) {
+    if ($cols > 8) {
         $panelClass = 'panel-c1';
     }
 
     // Minimum tile width.
-    $minw = 140;
-    if ($ctrl === 1) {
-        $minw = 60;
-    }
+    $minw = $cols > 8 ? 60 : 140;
 ?>
     <div class="nas-panel <?php echo $panelClass; ?>">
       <div class="d-flex align-items-center justify-content-between mb-3">
