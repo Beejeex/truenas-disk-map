@@ -11,7 +11,7 @@ foreach (explode("\n", $output) as $line)
     if (preg_match('/^\s*(\d+)\s+(.+)$/', $line, $matches))
     {
         $description = $matches[2];
-        if (preg_match('/\b(SAS|LSI|Avago|Broadcom)\b/i', $description))
+        if (preg_match('/\b(SAS|LSI|Avago|Broadcom)/i', $description))
         {
             $controllers[] = $matches[1];
         }
