@@ -654,7 +654,7 @@ html.theme-light{
 .vdev-label.vdev-c4{ background:rgba(249,115,22,.25); color:#fb923c; }
 .vdev-label.vdev-c5{ background:rgba(236,72,153,.25); color:#f472b6; }
 .vdev-label.vdev-spare{ background:rgba(233,236,239,.18); color:#cbd3da; }
-.vdev-label.vdev-unused{ background:rgba(45,168,255,.35); color:#2da8ff; }
+.vdev-label.vdev-unused{ background:rgba(148,163,184,.25); color:#94a3b8; }
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meta-label{ font-size:11px; color:#9aa6b2; margin:1px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -1176,22 +1176,22 @@ html.theme-light .btn-outline-secondary{
 			// Short pool name for the grid.
 			$pool_name_short = $pool_name;
 			if ($pool_name_short !== '' && $pool_name_short !== 'UNUSED') {
-				if (strlen($pool_name_short) > 4) {
-					$pool_name_short = substr($pool_name_short, 0, 4);
+				if (strlen($pool_name_short) > 8) {
+					$pool_name_short = substr($pool_name_short, 0, 7) . '…';
 				}
 			}
 
 
 			// Slot label with optional pool and VDEV/SPARE/UNUSED tags.
 			$slotLabelHtml = 'Slot #' . (int)$slotnum;
-			if ($pool_name !== '') {
+			if ($pool_name !== '' && $pool_name !== 'UNUSED') {
 				$slotLabelHtml .= ' ['
 					. '<span class="pool-short">' . htmlspecialchars($pool_name_short) . '</span>'
 					. '<span class="pool-full">'  . htmlspecialchars($pool_name)        . '</span>'
 					. ']';
 			}
 			// VDEV type label (color-coded by index)
-			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short])) {
+			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short]) && !$is_unused) {
 				$vd = $vdev_by_disk[$dev_short];
 				$vdev_type = isset($vd['vdev_type']) ? $vd['vdev_type'] : '';
 				$vdev_idx  = isset($vd['vdev_index']) ? (int)$vd['vdev_index'] : 0;
@@ -1199,7 +1199,7 @@ html.theme-light .btn-outline-secondary{
 					$slotLabelHtml .= ' <span class="vdev-label vdev-c' . ($vdev_idx % 6) . '">' . htmlspecialchars($vdev_type) . '-' . $vdev_idx . '</span>';
 				}
 			}
-			if ($is_spare) {
+			if ($is_spare && !$is_unused) {
 				$slotLabelHtml .= ' <span class="vdev-label vdev-spare">SPARE</span>';
 			}
 			if ($is_unused) {
