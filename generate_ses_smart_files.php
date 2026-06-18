@@ -28,8 +28,13 @@ function get_device_by_serial($serial, $cache_file = "serial_cache.txt")
 
         list($s, $dev) = $parts;
 
-        // Match: cache serial contains HDD serial or HDD serial contains cache serial
-        if (strpos($s, $serial) === 0 || strpos($serial, $s) === 0)
+        // Match by prefix (handles sas3ircu shortened serials)
+        if (strpos($s, $serial) === 0)
+        {
+            return $dev;
+        }
+        // Also try without hyphens (sas3ircu often drops WD- prefix hyphen)
+        if (strpos(str_replace('-', '', $s), str_replace('-', '', $serial)) === 0)
         {
             return $dev;
         }
@@ -536,6 +541,26 @@ foreach ($source_files as $file)
 
             $fields = array_map('tdm_clean_ses_field', $fields);
             fwrite($out, implode("|", $fields) . "\n");
+        }
+
+        // Fill empty bays from SES element data
+        $ses_elems = tdm_parse_ses_join($ses_device ? $ses_device['sg'] : '');
+        if (!empty($ses_elems)) {
+            foreach ($ses_elems as $ei => $elem) {
+                $already_written = false;
+                foreach ($enclosure_to_lines[$enc] as $row) {
+                    if ((int)$row[2] === $ei) { $already_written = true; break; }
+                }
+                if ($already_written) continue;
+
+                $empty_fields = array(
+                    'EMPTY', 'Empty', $label, $ei, 'EMPTY', '', '',
+                    '', '', '', 0, '', 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0,
+                );
+                $empty_fields = array_map('tdm_clean_ses_field', $empty_fields);
+                fwrite($out, implode("|", $empty_fields) . "\n");
+            }
         }
 
         fclose($out);

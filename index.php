@@ -320,6 +320,7 @@ foreach ($files as $file)
     $tiles      = [];
     $title      = null;
     $max_slot   = 0;
+    $first_capacity = '';
 
     foreach ($lines as $line)
     {
@@ -331,6 +332,7 @@ foreach ($files as $file)
         $meta = tdm_ses_meta_from_parts($parts);
 
         if ($title === null) $title = trim($locatie);
+        if ($first_capacity === '') $first_capacity = $meta['capacity'];
 
         // SMART-derived visual class, with SPARE override.
         $class = tdm_status_class($smart);
@@ -356,14 +358,8 @@ foreach ($files as $file)
         ];
     }
 
-    // Determine layout: find first non-empty disk
-    $cols = 15;
-    foreach ($tiles as $tile) {
-        $cap = $tile['meta']['capacity'];
-        if ($cap === '') continue; // skip empty slots
-        $cols = (stripos($cap, 'TB') !== false) ? 4 : 15;
-        break;
-    }
+    // Determine layout: 3.5" TB drives → 4 cols horizontal, everything else → 15 cols vertical
+    $cols = (stripos($first_capacity, 'TB') !== false) ? 4 : 15;
 
     if ($title === null) $title = basename($file);
 
