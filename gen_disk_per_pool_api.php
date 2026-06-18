@@ -2,7 +2,7 @@
 // Generate disk_data/disk_per_pool.txt with pool, data disk, and spare disk labels.
 // Also generates disk_data/disk_vdev.json with per-disk VDEV type and index.
 
-require_once __DIR__ . "/config_api.php";
+require __DIR__ . "/config_api.php";
 
 $target_dir = __DIR__ . "/disk_data";
 $target_file = $target_dir . "/disk_per_pool.txt";
@@ -23,8 +23,6 @@ if (!tdm_api_configured())
     echo "[INFO] TrueNAS API is not configured; pool labels were skipped.\n";
     return;
 }
-
-echo "[DEBUG] API configured, fetching /pool...\n";
 
 function truenas_api_get($url, $api_key, $verify_tls)
 {

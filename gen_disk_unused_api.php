@@ -1,7 +1,7 @@
 <?php
 // Generate disk_data/disk_unused_no_pool.txt with non-boot disks that are not assigned to a pool.
 
-require_once __DIR__ . "/config_api.php";
+require __DIR__ . "/config_api.php";
 
 $target_dir  = __DIR__ . "/disk_data";
 $target_file = $target_dir . "/disk_unused_no_pool.txt";
