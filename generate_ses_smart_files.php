@@ -396,6 +396,7 @@ if (is_file($controllers_file))
 
 $generated = 0;
 $mapped = array();
+$enc_counter = 0; // global counter for SES device assignment
 $source_files = glob($target_dir . "/hdd_c_*");
 if ($source_files === false)
 {
@@ -454,20 +455,13 @@ foreach ($source_files as $file)
     foreach ($enc_keys as $enc_index => $enc)
     {
         $ses_device = null;
-        // Match SES device by controller number from filename, not enclosure index
-        $ctrl_idx = (int)$ctrl;
-        if (isset($ses_devs[$ctrl_idx]))
-        {
-            $ses_device = $ses_devs[$ctrl_idx];
-        }
-        elseif (isset($ses_devs[$enc_index]))
-        {
-            $ses_device = $ses_devs[$enc_index];
-        }
-        elseif (count($ses_devs) === 1)
-        {
+        // Assign SES devices sequentially across all enclosure groups
+        if (isset($ses_devs[$enc_counter])) {
+            $ses_device = $ses_devs[$enc_counter];
+        } elseif (count($ses_devs) === 1) {
             $ses_device = $ses_devs[0];
         }
+        $enc_counter++;
 
         $fallback_label = "Controller " . $ctrl . " Enclosure " . $enc;
         $label = tdm_enclosure_label($ses_device, $fallback_label);

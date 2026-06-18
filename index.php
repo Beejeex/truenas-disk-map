@@ -319,7 +319,6 @@ foreach ($files as $file)
     $controller = get_controller_from_file($file);
     $tiles      = [];
     $title      = null;
-    $min_slot   = PHP_INT_MAX;
     $max_slot   = 0;
     $first_capacity = '';
 
@@ -345,7 +344,6 @@ foreach ($files as $file)
         }
 
         $pozitia = (int)$slot; // raw slot number
-        if ($pozitia < $min_slot) $min_slot = $pozitia;
         if ($pozitia > $max_slot) $max_slot = $pozitia;
 
         $tiles[$pozitia] = [
@@ -362,17 +360,6 @@ foreach ($files as $file)
 
     // Determine layout: 3.5" TB drives → 4 cols horizontal, everything else → 15 cols vertical
     $cols = (stripos($first_capacity, 'TB') !== false) ? 4 : 15;
-
-    // Normalize slots to start at 0 (physical bay numbering)
-    if ($min_slot < PHP_INT_MAX) {
-        $offset = $min_slot;
-        $norm = [];
-        foreach ($tiles as $pos => $tile) {
-            $norm[$pos - $offset] = $tile;
-        }
-        $tiles = $norm;
-        $max_slot = $max_slot - $offset;
-    }
 
     if ($title === null) $title = basename($file);
 
@@ -1047,27 +1034,25 @@ html.theme-light .btn-outline-secondary{
         $cols = 1;
     }
 
-    // total (count of slots from 0 to max)
-    $total = 0;
-    if (isset($panel['max_slot'])) {
-        $total = (int)$panel['max_slot'] + 1;
-    }
-    if ($total < 0) {
-        $total = 0;
-    }
-
     // controller
     $ctrl = 0;
     if (isset($panel['controller'])) {
         $ctrl = (int)$panel['controller'];
     }
 
-    // order (column-wise for landscape, row-wise for portrait)
+    // Build display order from sorted tile keys
+    $tileKeys = array_keys($panel['tiles']);
+    sort($tileKeys, SORT_NUMERIC);
+    $total = count($tileKeys);
+
+    // order
     $order = array();
-    if ($cols > 8) {
-        $order = build_display_order_rowwise_reversed($total, $cols);
-    } else {
-        $order = build_display_order_colwise_top_high($total, $cols);
+    if ($total > 0) {
+        if ($cols > 8) {
+            $order = build_display_order_rowwise_reversed($total, $cols);
+        } else {
+            $order = build_display_order_colwise_top_high($total, $cols);
+        }
     }
 
     // rows
@@ -1128,7 +1113,7 @@ html.theme-light .btn-outline-secondary{
       <?php
         foreach ($order as $orderPos) {
 
-            $slotnum = $orderPos - 1; // 0-based
+            $slotnum = $tileKeys[$orderPos - 1]; // raw physical slot
             $has = isset($panel['tiles'][$slotnum]);
             $info = null;
             if ($has) {
