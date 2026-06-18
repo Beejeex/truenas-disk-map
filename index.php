@@ -369,8 +369,8 @@ foreach ($files as $file)
         $cols = 4; // small enclosure
     }
 
-    // Normalize slots to start at 1
-    if ($min_slot < PHP_INT_MAX && $min_slot > 0) {
+    // Always normalize slots to start at 1 (handles both 0-based sas3ircu and offset SCSI targets)
+    if ($min_slot < PHP_INT_MAX) {
         $offset = $min_slot - 1;
         $norm = [];
         foreach ($tiles as $pos => $tile) {
