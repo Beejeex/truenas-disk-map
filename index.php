@@ -323,6 +323,7 @@ foreach ($files as $file)
     $cols       = cols_for_file($file);
     $tiles      = [];
     $title      = null;
+    $min_slot   = PHP_INT_MAX;
     $max_slot   = 0;
 
     foreach ($lines as $line)
@@ -342,8 +343,8 @@ foreach ($files as $file)
             $class = "smart-spare";
         }
 
-
-        $pozitia = (int)$slot + 1; // 1-based
+        $pozitia = (int)$slot; // raw slot number
+        if ($pozitia < $min_slot) $min_slot = $pozitia;
         if ($pozitia > $max_slot) $max_slot = $pozitia;
 
         $tiles[$pozitia] = [
@@ -356,6 +357,17 @@ foreach ($files as $file)
             'cmd_off'=> trim($cmd_off),
             'meta'   => $meta,
         ];
+    }
+
+    // Normalize slots to start at 1
+    if ($min_slot < PHP_INT_MAX && $min_slot > 0) {
+        $offset = $min_slot - 1;
+        $norm = [];
+        foreach ($tiles as $pos => $tile) {
+            $norm[$pos - $offset] = $tile;
+        }
+        $tiles = $norm;
+        $max_slot = $max_slot - $offset;
     }
 
     if ($title === null) $title = basename($file);
