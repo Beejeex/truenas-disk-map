@@ -1,10 +1,12 @@
 <?php
 // Generate disk_data/disk_per_pool.txt with pool, data disk, and spare disk labels.
+// Also generates disk_data/disk_vdev.json with per-disk VDEV type and index.
 
 require_once __DIR__ . "/config_api.php";
 
 $target_dir = __DIR__ . "/disk_data";
 $target_file = $target_dir . "/disk_per_pool.txt";
+$vdev_file    = $target_dir . "/disk_vdev.json";
 
 if (!is_dir($target_dir))
 {
@@ -17,6 +19,7 @@ if (!is_dir($target_dir))
 if (!tdm_api_configured())
 {
     file_put_contents($target_file, "[]\n");
+    file_put_contents($vdev_file, json_encode((object)[]));
     echo "[INFO] TrueNAS API is not configured; pool labels were skipped.\n";
     return;
 }
@@ -74,6 +77,7 @@ if (!is_array($pools))
 }
 
 $result = array();
+$vdev_map = array();  // disk_device => {pool, vdev_type, vdev_index}
 
 // Parcurgem fiecare pool si extragem data_disks si spare_disks
 foreach ($pools as $pool)
@@ -95,10 +99,12 @@ foreach ($pools as $pool)
     if (isset($pool["topology"]) && is_array($pool["topology"]))
     {
         // Data vdevs with children->disk entries.
+        $vdev_index = 0;
         if (isset($pool["topology"]["data"]) && is_array($pool["topology"]["data"]))
         {
             foreach ($pool["topology"]["data"] as $vdev)
             {
+                $vdev_type = isset($vdev["type"]) ? strtoupper(trim($vdev["type"])) : 'DATA';
                 if (isset($vdev["children"]) && is_array($vdev["children"]))
                 {
                     foreach ($vdev["children"] as $child)
@@ -109,17 +115,30 @@ foreach ($pools as $pool)
                             if ($dname !== "")
                             {
                                 $data_disks[] = $dname;
+                                // Track VDEV info per disk
+                                $vdev_map[$dname] = array(
+                                    'pool'       => $pool_name,
+                                    'vdev_type'  => $vdev_type,
+                                    'vdev_index' => $vdev_index,
+                                );
                             }
                         }
                     }
                 }
+                $vdev_index++;
             }
         }
 
         // Some TrueNAS versions use "spare"; others use "spares".
+        $spare_list = null;
         if (isset($pool["topology"]["spare"]) && is_array($pool["topology"]["spare"]))
+            $spare_list = $pool["topology"]["spare"];
+        elseif (isset($pool["topology"]["spares"]) && is_array($pool["topology"]["spares"]))
+            $spare_list = $pool["topology"]["spares"];
+
+        if ($spare_list !== null)
         {
-            foreach ($pool["topology"]["spare"] as $sp)
+            foreach ($spare_list as $sp)
             {
                 if (isset($sp["disk"]) && $sp["disk"] !== null)
                 {
@@ -127,21 +146,11 @@ foreach ($pools as $pool)
                     if ($sname !== "")
                     {
                         $spare_disks[] = $sname;
-                    }
-                }
-            }
-        }
-        else
-        if (isset($pool["topology"]["spares"]) && is_array($pool["topology"]["spares"]))
-        {
-            foreach ($pool["topology"]["spares"] as $sp)
-            {
-                if (isset($sp["disk"]) && $sp["disk"] !== null)
-                {
-                    $sname = trim($sp["disk"]);
-                    if ($sname !== "")
-                    {
-                        $spare_disks[] = $sname;
+                        $vdev_map[$sname] = array(
+                            'pool'       => $pool_name,
+                            'vdev_type'  => 'SPARE',
+                            'vdev_index' => null,
+                        );
                     }
                 }
             }
@@ -176,3 +185,19 @@ fwrite($f, $pretty . "\n");
 fclose($f);
 
 echo "[OK] Generated: " . $target_file . "\n";
+
+// ── Write VDEV map ──────────────────────────────────────────────────
+$vdev_pretty = json_encode($vdev_map, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+if ($vdev_pretty === false)
+{
+    throw new RuntimeException("json_encode vdev_map failed: " . json_last_error_msg());
+}
+$fv = fopen($vdev_file, "w");
+if ($fv === false)
+{
+    throw new RuntimeException("Could not open file for writing: " . $vdev_file);
+}
+fwrite($fv, $vdev_pretty . "\n");
+fclose($fv);
+
+echo "[OK] Generated: " . $vdev_file . "\n";

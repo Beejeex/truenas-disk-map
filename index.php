@@ -265,6 +265,17 @@ $pool_options = array_keys($pool_names);
 sort($pool_options, SORT_NATURAL | SORT_FLAG_CASE);
 
 
+// ======================== LOAD VDEV MAP ========================
+$vdev_by_disk = array();
+$vdev_file = __DIR__ . "/disk_data/disk_vdev.json";
+if (is_file($vdev_file)) {
+    $vdev_raw = @json_decode(@file_get_contents($vdev_file), true);
+    if (is_array($vdev_raw)) {
+        $vdev_by_disk = $vdev_raw;
+    }
+}
+
+
 
 // ======================== LOAD GENERATED SES FILES ========================
 $files = glob("disk_data/*_ses");
@@ -607,6 +618,20 @@ html.theme-light{
   font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef;
   text-shadow: 0 1px 3px rgba(0,0,0,.8);
 }
+.vdev-label{
+  display:inline-block;
+  padding:0 5px;
+  border-radius:4px;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.3px;
+  background:rgba(45,168,255,.25);
+  color:#7cc8ff;
+  vertical-align:middle;
+  margin-left:2px;
+}
+.vdev-label.vdev-spare{ background:rgba(233,236,239,.18); color:#cbd3da; }
+.vdev-label.vdev-unused{ background:rgba(45,168,255,.35); color:#2da8ff; }
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meta-label{ font-size:11px; color:#9aa6b2; margin:1px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -1124,21 +1149,14 @@ html.theme-light .btn-outline-secondary{
 			
 			// Short pool name for the grid.
 			$pool_name_short = $pool_name;
-			if ($pool_name_short !== '') {
-				if (strlen($pool_name_short) > 5) {
-					$pool_name_short = substr($pool_name_short, 0, 4) . '...';
-				}
-			}
-
-
-			// Slot label with optional pool and SPARE tags.
-			$pool_name_short = $pool_name;
 			if ($pool_name_short !== '' && $pool_name_short !== 'UNUSED') {
 				if (strlen($pool_name_short) > 5) {
 					$pool_name_short = substr($pool_name_short, 0, 5) . '...';
 				}
 			}
 
+
+			// Slot label with optional pool and VDEV/SPARE/UNUSED tags.
 			$slotLabelHtml = 'Slot #' . (int)$slotnum;
 			if ($pool_name !== '') {
 				$slotLabelHtml .= ' ['
@@ -1146,9 +1164,34 @@ html.theme-light .btn-outline-secondary{
 					. '<span class="pool-full">'  . htmlspecialchars($pool_name)        . '</span>'
 					. ']';
 			}
-			if ($is_spare) {
-				$slotLabelHtml .= ' - SPARE';
+			// VDEV type label
+			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short])) {
+				$vd = $vdev_by_disk[$dev_short];
+				$vdev_type = isset($vd['vdev_type']) ? $vd['vdev_type'] : '';
+				$vdev_idx  = isset($vd['vdev_index']) ? (int)$vd['vdev_index'] : 0;
+				if ($vdev_type !== '' && $vdev_type !== 'DATA') {
+					$slotLabelHtml .= ' <span class="vdev-label">' . htmlspecialchars($vdev_type) . '-' . $vdev_idx . '</span>';
+				}
 			}
+			if ($is_spare) {
+				$slotLabelHtml .= ' <span class="vdev-label vdev-spare">SPARE</span>';
+			}
+			if ($is_unused) {
+				$slotLabelHtml .= ' <span class="vdev-label vdev-unused">UNUSED</span>';
+			}
+			// Build VDEV label for the modal
+			$vdev_label = '';
+			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short])) {
+				$vd = $vdev_by_disk[$dev_short];
+				$vt = isset($vd['vdev_type']) ? $vd['vdev_type'] : '';
+				$vi = isset($vd['vdev_index']) ? (int)$vd['vdev_index'] : 0;
+				if ($vt !== '' && $vt !== 'DATA') {
+					$vdev_label = $vt . '-' . $vi;
+				}
+			}
+			if ($is_spare && $vdev_label === '') $vdev_label = 'SPARE';
+			if ($is_unused) $vdev_label = 'UNUSED';
+
             // Device and serial label.
             $labelText = $device;
             if ($serial !== '') {
@@ -1174,7 +1217,8 @@ html.theme-light .btn-outline-secondary{
 			  <?php echo $is_spare ? 'true' : 'false'; ?>,
               <?php echo tdm_js($meta); ?>,
               <?php echo tdm_js($counter_summary); ?>,
-              <?php echo tdm_js($status_name); ?>
+              <?php echo tdm_js($status_name); ?>,
+              <?php echo tdm_js($vdev_label); ?>
 			)"
 			>
           <div class="hdd-content">
@@ -1406,6 +1450,10 @@ html.theme-light .btn-outline-secondary{
           <div class="metric-card">
             <span class="metric-label"><?php echo tdm_h('modal.pool'); ?></span>
             <span id="mPool" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">VDEV</span>
+            <span id="mVdev" class="metric-value copyable" title="<?php echo tdm_h('modal.copy_field'); ?>">-</span>
           </div>
         </div>
 
@@ -1679,7 +1727,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 });
 
-function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters, statusName) {
+function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolName, isSpare, meta, counters, statusName, vdevLabel) {
   meta = meta || {};
   var nameWithSerial = name || 'Empty';
   if (serial) nameWithSerial += ' [ ' + serial + ' ]';
@@ -1705,10 +1753,12 @@ function openDriveModal(slot, name, serial, smart, locatie, cmdOn, cmdOff, poolN
     statusPill.className = 'modal-status-pill status-' + statusSlug;
   }
 
-  // Pool
+  // Pool + VDEV
   var poolText = poolName || '-';
+  if (vdevLabel) poolText += ' / ' + vdevLabel;
   if (isSpare) poolText += (poolText !== '-' ? ' ' : '') + '(SPARE)';
   document.getElementById('mPool').textContent = poolText;
+  document.getElementById('mVdev').textContent = vdevLabel || '-';
 
   // --- Nume (granular) ---
   var devSpan    = document.getElementById('mNameDev');
