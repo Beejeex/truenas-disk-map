@@ -27,7 +27,7 @@ function tdm_parse_ses_join($sg_device)
     if (!tdm_is_safe_sg_device($sg_device)) return [];
 
     $code = 0;
-    $output = tdm_run_command(['sg_ses', '--join', $sg_device], $code);
+    $output = tdm_run_command(['/usr/bin/sg_ses', '--join', $sg_device], $code);
     // sg_ses may exit non-zero even with valid output; check content instead
     if (trim($output) === '') return [];
 
