@@ -28,7 +28,8 @@ function tdm_parse_ses_join($sg_device)
 
     $code = 0;
     $output = tdm_run_command(['sg_ses', '--join', $sg_device], $code);
-    if ($code !== 0) return [];
+    // sg_ses may exit non-zero even with valid output; check content instead
+    if (trim($output) === '') return [];
 
     $elements = [];
     $current_element = null;
@@ -202,8 +203,11 @@ function tdm_parse_lsscsi_transport()
         if (preg_match('/sas:(0x[0-9a-f]+)\s+(\/dev\/sd[a-z]+)/i', $line, $m)) {
             $disks[$m[2]] = $m[1];
         }
-        if (preg_match('/enclosu\s+sas:(0x[0-9a-f]+)\s+-?\s+(\/dev\/sg\d+)/i', $line, $m)) {
-            $enclosures[$m[2]] = $m[1];
+        if (preg_match('/enclosu\s+sas:(0x[0-9a-f]+)/i', $line, $m)) {
+            // Extract HCTL from beginning of line: [H:C:T:L]
+            if (preg_match('/^\[([^\]]+)\]/', $line, $hctl)) {
+                $enclosures[$hctl[1]] = $m[1];
+            }
         }
     }
     return ['disks' => $disks, 'enclosures' => $enclosures];

@@ -42,6 +42,8 @@ function write_lsscsi_hdd_files($target_dir)
 
     $written = 0;
     $file_index = 0;
+    $last_enclosure_target_by_bus = array();
+    $detected_disks = $detected['disks']; // for fallback
 
     foreach ($enclosures as $enc_index => $enc)
     {
@@ -49,7 +51,36 @@ function write_lsscsi_hdd_files($target_dir)
         $ses_elements = tdm_parse_ses_join($enc['sg']);
         if (empty($ses_elements))
         {
-            echo "[WARN] Could not read SES elements for " . $enc['sg'] . ", skipping.\n";
+            echo "[WARN] Could not read SES elements for " . $enc['sg'] . ", falling back to SCSI target grouping.\n";
+            // Fallback: group disks by SCSI target range (old behavior)
+            $enc_disks = [];
+            $bus_key = (string)$enc['host'] . ":" . (string)$enc['channel'];
+            $lower_target = $last_enclosure_target_by_bus[$bus_key] ?? -1;
+            foreach ($detected_disks as $disk) {
+                if ($disk['host'] !== $enc['host'] || $disk['channel'] !== $enc['channel']) continue;
+                if ($disk['target'] === null || $enc['target'] === null) continue;
+                if ($disk['target'] <= $lower_target || $disk['target'] >= $enc['target']) continue;
+                $enc_disks[] = $disk;
+            }
+            $total = count($enc_disks);
+            if ($total === 0) {
+                if ($enc['target'] !== null) $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
+                continue;
+            }
+            $out_path = $target_dir . "/hdd_c_" . $file_index;
+            $file = fopen($out_path, "w");
+            if (!$file) { echo "[WARN] Could not open: $out_path\n"; continue; }
+            $rows = 0;
+            foreach ($enc_disks as $disk) {
+                $serial = tdm_get_smart_serial($disk['dev']);
+                if ($serial === '') $serial = "DEV-" . basename($disk['dev']);
+                fwrite($file, $serial . "|" . $enc_index . "|" . $rows . "|" . $file_index . "\n");
+                $rows++; $written++;
+            }
+            fclose($file);
+            echo "[OK] SCSI fallback: " . $rows . " disks for " . $enc['sg'] . " → " . $out_path . "\n";
+            $file_index++;
+            if ($enc['target'] !== null) $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
             continue;
         }
 
