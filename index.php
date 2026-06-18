@@ -163,9 +163,25 @@ function get_controller_from_file($filepath)
 
 function cols_for_file($filepath)
 {
+    // Auto-detect: read first disk to determine form factor
+    // 3.5" drives (large capacity, TB range) → horizontal 4 columns
+    // 2.5" / SSD drives → vertical 15 columns
+    if (is_file($filepath)) {
+        $first = @fgets(@fopen($filepath, 'r'));
+        if ($first !== false) {
+            $parts = explode('|', $first);
+            $capacity = isset($parts[8]) ? trim($parts[8]) : '';
+            // Check if it's a large 3.5" drive (capacity in TB or ≥ 2TB in GB)
+            if (stripos($capacity, 'TB') !== false) return 4;
+            if (preg_match('/([\d.]+)\s*GB/', $capacity, $m)) {
+                if ((float)$m[1] >= 2000) return 4;
+            }
+        }
+    }
+
+    // Fallback: use controller number
     $c = get_controller_from_file($filepath);
-    if ($c === 0) return 4;   // c_0 => 4 coloane
-    if ($c === 1) return 15;  // c_1 => 15 coloane
+    if ($c === 1) return 15;
     return 4;
 }
 
