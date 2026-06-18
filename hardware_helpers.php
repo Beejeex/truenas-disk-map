@@ -186,6 +186,29 @@ function tdm_detect_lsscsi(&$raw_output = '', &$exit_code = null)
     );
 }
 
+/**
+ * Parse lsscsi -t output to get SAS transport addresses.
+ * Returns [ 'disks' => dev=>sas, 'enclosures' => sg=>sas ]
+ */
+function tdm_parse_lsscsi_transport()
+{
+    $code = 0;
+    $output = tdm_run_command(['lsscsi', '-t'], $code);
+    if ($code !== 0) return ['disks' => [], 'enclosures' => []];
+
+    $disks = [];
+    $enclosures = [];
+    foreach (explode("\n", $output) as $line) {
+        if (preg_match('/sas:(0x[0-9a-f]+)\s+(\/dev\/sd[a-z]+)/i', $line, $m)) {
+            $disks[$m[2]] = $m[1];
+        }
+        if (preg_match('/enclosu\s+sas:(0x[0-9a-f]+)\s+-?\s+(\/dev\/sg\d+)/i', $line, $m)) {
+            $enclosures[$m[2]] = $m[1];
+        }
+    }
+    return ['disks' => $disks, 'enclosures' => $enclosures];
+}
+
 function tdm_detect_ses_devices(&$raw_output = '', &$exit_code = null)
 {
     $detected = tdm_detect_lsscsi($raw_output, $exit_code);

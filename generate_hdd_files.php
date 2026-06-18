@@ -19,16 +19,12 @@ function write_lsscsi_hdd_files($target_dir)
     $raw_lsscsi = "";
     $lsscsi_code = 0;
     $detected = tdm_detect_lsscsi($raw_lsscsi, $lsscsi_code);
-    $disks = $detected['disks'];
     $enclosures = $detected['enclosures'];
 
     if ($lsscsi_code !== 0)
     {
         echo "[WARN] lsscsi fallback failed (exit " . $lsscsi_code . ").\n";
-        if (trim($raw_lsscsi) !== "")
-        {
-            echo trim($raw_lsscsi) . "\n";
-        }
+        if (trim($raw_lsscsi) !== "") echo trim($raw_lsscsi) . "\n";
         return 0;
     }
 
@@ -38,69 +34,64 @@ function write_lsscsi_hdd_files($target_dir)
         return 0;
     }
 
+    // Get SAS transport addresses for disk matching
+    $transport = tdm_parse_lsscsi_transport();
+    $sas_map = $transport['disks'];
+    $enc_sas_map = $transport['enclosures'];
+    echo "[INFO] SAS transport: " . count($sas_map) . " disk addresses, " . count($enc_sas_map) . " enclosure addresses resolved.\n";
+
     $written = 0;
     $file_index = 0;
-    $last_enclosure_target_by_bus = array();
 
     foreach ($enclosures as $enc_index => $enc)
     {
-        $bus_key = (string)$enc['host'] . ":" . (string)$enc['channel'];
-        $lower_target = $last_enclosure_target_by_bus[$bus_key] ?? -1;
-
-        // Collect disks belonging to this enclosure by SCSI target range
-        $enc_disks = [];
-        foreach ($disks as $disk)
-        {
-            if ($disk['host'] !== $enc['host'] || $disk['channel'] !== $enc['channel'])
-                continue;
-            if ($disk['target'] === null || $enc['target'] === null || $disk['target'] <= $lower_target || $disk['target'] >= $enc['target'])
-                continue;
-            $enc_disks[] = $disk;
-        }
-
-        // Try to read SES element data for slot count
+        // Read SES element data for this enclosure
         $ses_elements = tdm_parse_ses_join($enc['sg']);
-        $total_slots = !empty($ses_elements) ? count($ses_elements) : count($enc_disks);
-
-        if ($total_slots === 0)
+        if (empty($ses_elements))
         {
-            $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
+            echo "[WARN] Could not read SES elements for " . $enc['sg'] . ", skipping.\n";
             continue;
         }
 
+        // Match disks to this enclosure by SAS address
+        $slot_disks = []; // element_index => disk info
+        foreach ($ses_elements as $ei => $elem) {
+            $elem_sas = $elem['sas_address'];
+            if ($elem_sas === '' || $elem_sas === '0x0') continue;
+
+            foreach ($sas_map as $dev => $disk_sas) {
+                if (strcasecmp($disk_sas, $elem_sas) === 0) {
+                    $serial = tdm_get_smart_serial($dev);
+                    if ($serial === '') $serial = "DEV-" . basename($dev);
+                    $slot_disks[$ei] = ['dev' => $dev, 'serial' => $serial];
+                    break;
+                }
+            }
+        }
+
+        $total_slots = count($ses_elements);
         $out_path = $target_dir . "/hdd_c_" . $file_index;
         $file = fopen($out_path, "w");
         if ($file === false)
         {
-            echo "[WARN] Could not open lsscsi fallback output file: " . $out_path . "\n";
-            $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
+            echo "[WARN] Could not open output file: " . $out_path . "\n";
             continue;
         }
 
         $rows = 0;
-        // Write all slots (populated + empty)
-        for ($slot = 0; $slot < $total_slots; $slot++)
+        foreach ($ses_elements as $ei => $elem)
         {
-            $disk = $enc_disks[$slot] ?? null;
-            if ($disk) {
-                $serial = tdm_get_smart_serial($disk['dev']);
-                if ($serial === '') $serial = "DEV-" . basename($disk['dev']);
-            } else {
-                $serial = "EMPTY";
-            }
-            fwrite($file, $serial . "|" . $enc_index . "|" . $slot . "|" . $file_index . "\n");
+            $disk = $slot_disks[$ei] ?? null;
+            $serial = $disk ? $disk['serial'] : 'EMPTY';
+            fwrite($file, $serial . "|" . $enc_index . "|" . $ei . "|" . $file_index . "\n");
             $rows++;
             $written++;
         }
 
         fclose($file);
-        echo "[OK] lsscsi fallback generated " . $rows . " disk rows (" . count($enc_disks) . " populated, " . ($total_slots - count($enc_disks)) . " empty) for enclosure " . $enc['sg'] . " from " . $out_path . ".\n";
+        $populated = count($slot_disks);
+        echo "[OK] SAS-matched " . $populated . " disks in " . $total_slots . " slots for enclosure " . $enc['sg'] . " → " . $out_path . "\n";
         $file_index++;
-
-        if ($enc['target'] !== null)
-        {
-            $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
-        }
     }
 
     return $written;
