@@ -55,6 +55,7 @@ function write_lsscsi_hdd_files($target_dir)
         }
 
         $rows = 0;
+        $slot = 0; // physical bay counter for this enclosure
         foreach ($disks as $disk)
         {
             if ($disk['host'] !== $enc['host'] || $disk['channel'] !== $enc['channel'])
@@ -73,10 +74,10 @@ function write_lsscsi_hdd_files($target_dir)
                 $serial = "DEV-" . basename($disk['dev']);
             }
 
-            $slot = (int)$disk['target'];
             fwrite($file, $serial . "|" . $enc_index . "|" . $slot . "|" . $file_index . "\n");
             $rows++;
             $written++;
+            $slot++;
         }
 
         fclose($file);
