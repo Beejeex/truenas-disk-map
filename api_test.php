@@ -93,7 +93,7 @@ if ($poolCode >= 200 && $poolCode < 300) {
                     $vt = isset($vdev['type']) ? strtoupper($vdev['type']) : 'DATA';
                     $c = isset($vdev['children']) && is_array($vdev['children']) ? count($vdev['children']) : 0;
                     $poolDiskCount += $c;
-                    $vdevs[] = $c ? "$vt×$c" : $vt;
+                    $vdevs[] = $c ? "{$vt}×{$c}" : $vt;
                 }
             }
             $poolNames[] = $pn . ($vdevs ? ' (' . implode(', ', $vdevs) . ')' : '');
