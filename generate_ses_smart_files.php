@@ -219,11 +219,15 @@ function get_smart_report($dev)
         {
             $details['crc_errors'] = tdm_smart_attr_raw($line, 199, 'UDMA_CRC_Error_Count');
         }
-        elseif (preg_match('/^(190|194)\s+\S*Temperature\S*\b.*?\s+(-|\w+)\s+(.+)$/i', $line, $m))
+        elseif (preg_match('/^(190|194)\s+\S*Temperature\S*\b/i', $line))
         {
-            if ($details['temperature_c'] === '' && preg_match('/(-?\d+)/', $m[3], $tm))
-            {
-                $details['temperature_c'] = (string)(int)$tm[1];
+            // Extract all numbers from the line and take the last one (RAW_VALUE).
+            // The VALUE/WORST columns are normalized and misleading on WD drives.
+            if ($details['temperature_c'] === '' && preg_match_all('/-?\d+/', $line, $nums) && !empty($nums[0])) {
+                $raw = (int)$nums[0][count($nums[0]) - 1];
+                if ($raw > 0 && $raw < 200) {
+                    $details['temperature_c'] = (string)$raw;
+                }
             }
         }
     }
