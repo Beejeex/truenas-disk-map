@@ -1978,7 +1978,11 @@ $(function(){
   }
 
   function applySettings(data){
-    $url.val(data.api_url || '');
+    $url.val(data.api_url || data.suggested_url || '');
+    // If we're showing a suggestion, use placeholder to indicate it
+    if (!data.api_url && data.suggested_url) {
+      $url.attr('placeholder', data.suggested_url + ' (auto-detected)');
+    }
     $key.val('');
     $verify.prop('checked', !!data.verify_tls);
     $status.text(data.configured ? tdmMsg('api.status_configured') : tdmMsg('api.status_not_configured'));
