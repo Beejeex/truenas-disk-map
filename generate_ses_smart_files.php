@@ -454,7 +454,13 @@ foreach ($source_files as $file)
     foreach ($enc_keys as $enc_index => $enc)
     {
         $ses_device = null;
-        if (isset($ses_devs[$enc_index]))
+        // Match SES device by controller number from filename, not enclosure index
+        $ctrl_idx = (int)$ctrl;
+        if (isset($ses_devs[$ctrl_idx]))
+        {
+            $ses_device = $ses_devs[$ctrl_idx];
+        }
+        elseif (isset($ses_devs[$enc_index]))
         {
             $ses_device = $ses_devs[$enc_index];
         }
