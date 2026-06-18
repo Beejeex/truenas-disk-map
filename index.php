@@ -317,11 +317,11 @@ foreach ($files as $file)
     if (!$lines) continue;
 
     $controller = get_controller_from_file($file);
-    $cols       = cols_for_file($file);
     $tiles      = [];
     $title      = null;
     $min_slot   = PHP_INT_MAX;
     $max_slot   = 0;
+    $first_capacity = '';
 
     foreach ($lines as $line)
     {
@@ -333,6 +333,10 @@ foreach ($files as $file)
         $meta = tdm_ses_meta_from_parts($parts);
 
         if ($title === null) $title = trim($locatie);
+        if ($first_capacity === '') $first_capacity = $meta['capacity'];
+
+        // SMART-derived visual class, with SPARE override.
+        $class = tdm_status_class($smart);
 
         // SMART-derived visual class, with SPARE override.
         $class = tdm_status_class($smart);
@@ -354,6 +358,15 @@ foreach ($files as $file)
             'cmd_off'=> trim($cmd_off),
             'meta'   => $meta,
         ];
+    }
+
+    // Determine layout: 3.5" TB drives → 4 cols (horizontal), small/SSD → 15 cols
+    $tileCount = count($tiles);
+    $cols = 15; // default vertical
+    if (stripos($first_capacity, 'TB') !== false) {
+        $cols = 4; // 3.5" horizontal
+    } elseif ($tileCount <= 4) {
+        $cols = 4; // small enclosure
     }
 
     // Normalize slots to start at 1
