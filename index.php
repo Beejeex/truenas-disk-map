@@ -264,6 +264,15 @@ if (!empty($unused_by_disk)) {
 $pool_options = array_keys($pool_names);
 sort($pool_options, SORT_NATURAL | SORT_FLAG_CASE);
 
+// Warn if API is configured but no pool data was loaded
+$api_configured_but_no_pools = false;
+if (empty($pool_names) || (count($pool_names) === 1 && isset($pool_names['UNUSED']))) {
+    require_once __DIR__ . '/api_config_store.php';
+    if (tdm_api_configured()) {
+        $api_configured_but_no_pools = true;
+    }
+}
+
 
 // ======================== LOAD VDEV MAP ========================
 $vdev_by_disk = array();
@@ -917,6 +926,9 @@ html.theme-light .btn-outline-secondary{
       <span class="text-success"><?php echo tdm_h('status.ok'); ?></span>
     <?php endif; ?>
     <span class="text-muted"><?php echo tdm_h('last_update.files', array('count' => (int)$files_count)); ?></span>
+    <?php if ($api_configured_but_no_pools): ?>
+      <span style="color:#f59e0b; font-weight:700; margin-left:8px;">API connected but no pool data — run Refresh</span>
+    <?php endif; ?>
   </div>
 
   <div class="top-status-actions">
