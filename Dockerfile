@@ -25,7 +25,7 @@ RUN HASH=$(cat /var/www/html/.git/$(cat /var/www/html/.git/HEAD 2>/dev/null | se
 RUN mkdir -p /var/www/html/data /var/www/html/disk_data
 RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
 
-RUN echo "www-data ALL=(root) NOPASSWD: /usr/local/sbin/tdm-smartctl-read, /usr/local/sbin/tdm-sas3ircu-read, /usr/local/sbin/tdm-lsscsi-read, /usr/local/sbin/tdm-sg-ses-ident" > /etc/sudoers.d/truenas-disk-map \
+RUN echo "www-data ALL=(root) NOPASSWD: /usr/local/sbin/tdm-smartctl-read, /usr/local/sbin/tdm-sas3ircu-read, /usr/local/sbin/tdm-lsscsi-read, /usr/local/sbin/tdm-sg-ses-ident, /usr/bin/sg_ses --join *, /usr/bin/sg_ses --page=*" > /etc/sudoers.d/truenas-disk-map \
     && chmod 0440 /etc/sudoers.d/truenas-disk-map
 
 # Entrypoint starts the scheduler daemon + Apache (no host cron needed)

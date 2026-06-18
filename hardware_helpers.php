@@ -18,6 +18,54 @@ function tdm_run_command(array $argv, &$exit_code = null)
     return implode("\n", $output);
 }
 
+/**
+ * Parse sg_ses --join output to extract slot element data.
+ * Returns array of element_index => [device_slot_number, sas_address, installed]
+ */
+function tdm_parse_ses_join($sg_device)
+{
+    if (!tdm_is_safe_sg_device($sg_device)) return [];
+
+    $code = 0;
+    $output = tdm_run_command(['sudo', 'sg_ses', '--join', $sg_device], $code);
+    if ($code !== 0) return [];
+
+    $elements = [];
+    $current_element = null;
+
+    foreach (explode("\n", $output) as $line) {
+        // Match element header: "Slot00 [0,0]" or "Element 0 [0,0]"
+        if (preg_match('/^(?:Slot|Element\s*)?(\d+)\s*\[(\d+),(\d+)\]/i', $line, $m)) {
+            if ($current_element !== null) {
+                $elements[$current_element['index']] = $current_element;
+            }
+            $current_element = [
+                'index' => (int)$m[1],
+                'device_slot_number' => (int)$m[1],
+                'sas_address' => '',
+                'installed' => false,
+            ];
+        }
+        // device slot number
+        elseif ($current_element && preg_match('/device slot number:\s*(\d+)/i', $line, $m)) {
+            $current_element['device_slot_number'] = (int)$m[1];
+        }
+        // SAS address
+        elseif ($current_element && preg_match('/SAS address:\s*(0x[0-9a-f]+)/i', $line, $m)) {
+            $current_element['sas_address'] = $m[1];
+        }
+        // installed check
+        elseif ($current_element && preg_match('/status:\s*(OK|Installed)/i', $line, $m)) {
+            $current_element['installed'] = true;
+        }
+    }
+    if ($current_element !== null) {
+        $elements[$current_element['index']] = $current_element;
+    }
+
+    return $elements;
+}
+
 function tdm_parse_lsscsi_enclosures($output)
 {
     $devices = array();

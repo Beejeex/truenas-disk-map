@@ -485,6 +485,19 @@ foreach ($source_files as $file)
         foreach ($enclosure_to_lines[$enc] as $row)
         {
             list($serial, $enclosure, $slot, $row_ctrl) = $row;
+
+            // Handle empty slots
+            if ($serial === 'EMPTY') {
+                $fields = array(
+                    'EMPTY', 'Empty', $label, $slot, 'EMPTY', '', '',
+                    '', '', '', 0, '', 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0,
+                );
+                $fields = array_map('tdm_clean_ses_field', $fields);
+                fwrite($out, implode("|", $fields) . "\n");
+                continue;
+            }
+
             $device = get_device_by_serial($serial);
             $smart_report = get_smart_report($device);
             $smart_status = $smart_report['status'];

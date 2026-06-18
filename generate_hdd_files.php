@@ -46,51 +46,56 @@ function write_lsscsi_hdd_files($target_dir)
     {
         $bus_key = (string)$enc['host'] . ":" . (string)$enc['channel'];
         $lower_target = $last_enclosure_target_by_bus[$bus_key] ?? -1;
+
+        // Collect disks belonging to this enclosure by SCSI target range
+        $enc_disks = [];
+        foreach ($disks as $disk)
+        {
+            if ($disk['host'] !== $enc['host'] || $disk['channel'] !== $enc['channel'])
+                continue;
+            if ($disk['target'] === null || $enc['target'] === null || $disk['target'] <= $lower_target || $disk['target'] >= $enc['target'])
+                continue;
+            $enc_disks[] = $disk;
+        }
+
+        // Try to read SES element data for slot count
+        $ses_elements = tdm_parse_ses_join($enc['sg']);
+        $total_slots = !empty($ses_elements) ? count($ses_elements) : count($enc_disks);
+
+        if ($total_slots === 0)
+        {
+            $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
+            continue;
+        }
+
         $out_path = $target_dir . "/hdd_c_" . $file_index;
         $file = fopen($out_path, "w");
         if ($file === false)
         {
             echo "[WARN] Could not open lsscsi fallback output file: " . $out_path . "\n";
+            $last_enclosure_target_by_bus[$bus_key] = $enc['target'];
             continue;
         }
 
         $rows = 0;
-        $slot = 0; // physical bay counter for this enclosure
-        foreach ($disks as $disk)
+        // Write all slots (populated + empty)
+        for ($slot = 0; $slot < $total_slots; $slot++)
         {
-            if ($disk['host'] !== $enc['host'] || $disk['channel'] !== $enc['channel'])
-            {
-                continue;
+            $disk = $enc_disks[$slot] ?? null;
+            if ($disk) {
+                $serial = tdm_get_smart_serial($disk['dev']);
+                if ($serial === '') $serial = "DEV-" . basename($disk['dev']);
+            } else {
+                $serial = "EMPTY";
             }
-
-            if ($disk['target'] === null || $enc['target'] === null || $disk['target'] <= $lower_target || $disk['target'] >= $enc['target'])
-            {
-                continue;
-            }
-
-            $serial = tdm_get_smart_serial($disk['dev']);
-            if ($serial === '')
-            {
-                $serial = "DEV-" . basename($disk['dev']);
-            }
-
             fwrite($file, $serial . "|" . $enc_index . "|" . $slot . "|" . $file_index . "\n");
             $rows++;
             $written++;
-            $slot++;
         }
 
         fclose($file);
-
-        if ($rows === 0)
-        {
-            @unlink($out_path);
-        }
-        else
-        {
-            echo "[OK] lsscsi fallback generated " . $rows . " disk rows for enclosure " . $enc['sg'] . " from " . $out_path . ".\n";
-            $file_index++;
-        }
+        echo "[OK] lsscsi fallback generated " . $rows . " disk rows (" . count($enc_disks) . " populated, " . ($total_slots - count($enc_disks)) . " empty) for enclosure " . $enc['sg'] . " from " . $out_path . ".\n";
+        $file_index++;
 
         if ($enc['target'] !== null)
         {
