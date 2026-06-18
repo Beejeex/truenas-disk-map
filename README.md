@@ -439,10 +439,13 @@ TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access ri
 | **Password** | Set a strong password |
 | **Confirm Password** | Repeat the password |
 | **Disable Password** | **Unchecked** (must be off to set a password) |
-| **TrueNAS Access** | Checked, select **Readonly Admin** from the dropdown |
+| **TrueNAS Access** | **Unchecked** (do not assign a built-in role) |
 
-4. Leave all other fields at their defaults (Full Name, Email, UID, Home Directory).
-5. Click **Save**.
+4. Under **Auxiliary Groups**, add `truenas_readonly_administrators`.
+5. Leave all other fields at their defaults (Full Name, Email, UID, Home Directory).
+6. Click **Save**.
+
+> **If the Test button reports a 403 after setup:** try re-creating the user with the **Administrator** role instead. The app only makes 4 read-only API calls (`disk.query`, `pool.query`, `boot.get_disks`) and has no code paths that modify anything on your TrueNAS. Some TrueNAS versions restrict the Readonly Admin role more than others.
 
 ### Step 2: Create an API key
 
@@ -461,9 +464,11 @@ TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access ri
 
 The disk map will now show pool names, spare labels, and unused disk markers.
 
-> **Note:** The Readonly Admin role gives read access to pool membership, disk lists, and boot devices — exactly what the disk map needs. No write access to your TrueNAS.
+> **Note:** The `truenas_readonly_administrators` group provides read access to disk lists, pool membership, and boot devices — exactly what the disk map needs — without granting write access to your TrueNAS.
 >
-> If your TrueNAS version does not have a Readonly Admin role, leave API settings empty. The app still works for slot mapping, SMART, SES detection, and identify LEDs.
+> If the **Test** button in API Settings succeeds, you're good. If it reports a 403 ("lacks permission"), your TrueNAS version may restrict the readonly group. Use the full Administrator role as a fallback — the app makes no changes.
+>
+> If you prefer not to configure API access at all, leave API settings empty. The app still works for slot mapping, SMART, SES detection, and identify LEDs.
 
 ## Troubleshooting
 
