@@ -631,7 +631,7 @@ html.theme-light{
 .status-badge{
   position:absolute;
   top:8px;
-  left:50px;
+  right:24px;
   z-index:4;
   padding:2px 7px;
   border-radius:5px;
