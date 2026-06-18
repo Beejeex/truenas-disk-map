@@ -2137,19 +2137,41 @@ SES + SMART + TrueNAS
 
 <script>
 // ── Auto-refresh status polling ────────────────────────────────────
-// Polls refresh_status.php every 30s to show if a background
-// (cron-triggered) refresh is running. Does NOT block the UI.
+// Polls refresh_status.php every 30s. Shows a badge while a background
+// refresh is running, and auto-reloads the page when new data is ready.
 (function(){
   var $badge = $('#autoRefreshBadge');
   var POLL_INTERVAL = 30000; // 30 seconds
+  var lastRunAt = null;      // track last completed refresh timestamp
+  var wasRunning = false;
 
   function poll(){
     $.getJSON('refresh_status.php')
       .done(function(data){
-        if (data && data.running) {
+        if (!data) return;
+
+        var running = !!data.running;
+
+        // Show/hide badge
+        if (running) {
           $badge.show();
         } else {
           $badge.hide();
+        }
+
+        // Auto-reload when a refresh just finished and we have new data
+        if (wasRunning && !running && data.last_run_at && data.last_status === 'ok') {
+          if (data.last_run_at !== lastRunAt) {
+            // New refresh completed — reload page to pick up fresh data
+            location.reload();
+            return;
+          }
+        }
+
+        // Track state for next poll
+        wasRunning = running;
+        if (!running && data.last_run_at) {
+          lastRunAt = data.last_run_at;
         }
       })
       .fail(function(){
