@@ -130,6 +130,11 @@ return array(
     'api.status_not_configured' => 'Not configured',
     'button.save' => 'Save',
     'button.disable' => 'Disable',
+    'button.test' => 'Test',
+
+    'api.test_ok' => 'Connection successful!',
+    'api.test_fail' => 'Connection failed:',
+    'api.test_error' => 'Test request failed:',
 
     'js.device_unknown' => 'Unknown device.',
     'js.smart_running' => 'Running smartctl -x {device} ...',

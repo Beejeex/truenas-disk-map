@@ -1546,6 +1546,7 @@ html.theme-light .btn-outline-secondary{
 
       <div class="modal-footer">
         <button id="apiDisable" type="button" class="btn btn-outline-warning btn-sm"><?php echo tdm_h('button.disable'); ?></button>
+        <button id="apiTest" type="button" class="btn btn-outline-info btn-sm"><?php echo tdm_h('button.test'); ?></button>
         <button id="apiSave" type="button" class="btn btn-success btn-sm"><?php echo tdm_h('button.save'); ?></button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal"><?php echo tdm_h('modal.close'); ?></button>
       </div>
@@ -1630,6 +1631,9 @@ var TDM_I18N = <?php echo json_encode(array(
   'js.api_disabled' => tdm_t('js.api_disabled'),
   'api.status_configured' => tdm_t('api.status_configured'),
   'api.status_not_configured' => tdm_t('api.status_not_configured'),
+  'api.test_ok' => tdm_t('api.test_ok'),
+  'api.test_fail' => tdm_t('api.test_fail'),
+  'api.test_error' => tdm_t('api.test_error'),
   'theme.light' => tdm_t('theme.light'),
   'theme.dark' => tdm_t('theme.dark'),
   'smart.output.title' => tdm_t('smart.output.title'),
@@ -1960,6 +1964,7 @@ $(function(){
   var $open = $('#btnApiSettings');
   var $save = $('#apiSave');
   var $disable = $('#apiDisable');
+  var $test = $('#apiTest');
   var $url = $('#apiUrl');
   var $key = $('#apiKey');
   var $verify = $('#apiVerifyTls');
@@ -1969,6 +1974,7 @@ $(function(){
   function setBusy(busy){
     $save.prop('disabled', busy);
     $disable.prop('disabled', busy);
+    $test.prop('disabled', busy);
   }
 
   function applySettings(data){
@@ -2020,6 +2026,37 @@ $(function(){
 
   $save.on('click', function(){ saveSettings('save'); });
   $disable.on('click', function(){ saveSettings('disable'); });
+
+  $test.on('click', function(){
+    setBusy(true);
+    var prevText = $test.text();
+    $test.text('…').prop('disabled', true);
+    $.ajax({
+      url: 'api_test.php',
+      method: 'POST',
+      contentType: 'application/json',
+      dataType: 'json',
+      data: JSON.stringify({
+        api_url: $url.val(),
+        api_key: $key.val(),
+        verify_tls: $verify.is(':checked')
+      })
+    })
+    .done(function(data){
+      if (data && data.ok) {
+        alert(tdmMsg('api.test_ok') + '\n' + (data.message || ''));
+      } else {
+        alert(tdmMsg('api.test_fail') + '\n' + ((data && data.message) || 'Unknown error'));
+      }
+    })
+    .fail(function(xhr){
+      alert(tdmMsg('api.test_error') + '\n' + (xhr.responseText || xhr.status));
+    })
+    .always(function(){
+      $test.text(prevText);
+      setBusy(false);
+    });
+  });
 })();
 </script>
 
