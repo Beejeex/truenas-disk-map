@@ -24,6 +24,8 @@ if (!tdm_api_configured())
     return;
 }
 
+echo "[DEBUG] API configured, fetching /pool...\n";
+
 function truenas_api_get($url, $api_key, $verify_tls)
 {
     $ch = curl_init();
