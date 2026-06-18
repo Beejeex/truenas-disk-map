@@ -20,7 +20,7 @@ RUN echo "max_execution_time = 180" > /usr/local/etc/php/conf.d/custom.ini
 COPY . /var/www/html/
 WORKDIR /var/www/html/
 RUN rm -f /var/www/html/index.html
-RUN cd /var/www/html && (git rev-parse --short HEAD 2>/dev/null || echo "dev") > /var/www/html/version.txt
+RUN cd /var/www/html && (git rev-parse --short HEAD 2>/dev/null || echo "dev") > /version.txt
 RUN mkdir -p /var/www/html/data /var/www/html/disk_data
 RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
 

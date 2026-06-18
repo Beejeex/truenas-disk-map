@@ -3,8 +3,8 @@
 require_once __DIR__ . "/i18n.php";
 
 $app_version = "0.1.6";
-// Prefer git commit hash from build
-$version_file = __DIR__ . "/version.txt";
+// Prefer git commit hash from build (stored outside web root to survive volume mounts)
+$version_file = "/version.txt";
 if (is_file($version_file)) {
     $hash = trim(file_get_contents($version_file));
     if ($hash !== '' && $hash !== 'dev') {
