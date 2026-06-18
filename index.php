@@ -369,9 +369,9 @@ foreach ($files as $file)
         $cols = 4; // small enclosure
     }
 
-    // Always normalize slots to start at 1 (handles both 0-based sas3ircu and offset SCSI targets)
+    // Normalize slots to start at 0 (physical bay numbering)
     if ($min_slot < PHP_INT_MAX) {
-        $offset = $min_slot - 1;
+        $offset = $min_slot;
         $norm = [];
         foreach ($tiles as $pos => $tile) {
             $norm[$pos - $offset] = $tile;
@@ -1053,10 +1053,10 @@ html.theme-light .btn-outline-secondary{
         $cols = 1;
     }
 
-    // total
+    // total (count of slots from 0 to max)
     $total = 0;
     if (isset($panel['max_slot'])) {
-        $total = (int)$panel['max_slot'];
+        $total = (int)$panel['max_slot'] + 1;
     }
     if ($total < 0) {
         $total = 0;
@@ -1135,8 +1135,9 @@ html.theme-light .btn-outline-secondary{
 
       <div class="nas-grid" style="grid-template-columns: repeat(<?php echo $cols; ?>, minmax(<?php echo $minw; ?>px, 1fr));">
       <?php
-        foreach ($order as $slotnum) {
+        foreach ($order as $orderPos) {
 
+            $slotnum = $orderPos - 1; // 0-based
             $has = isset($panel['tiles'][$slotnum]);
             $info = null;
             if ($has) {
