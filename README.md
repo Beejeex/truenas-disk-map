@@ -416,7 +416,7 @@ If you used the deployment examples above, that file persists on the host in:
 
 ## Creating a Read-Only API Key
 
-The API key is used only for optional labels. The app does not need API permission to change disks, pools, datasets, users, services, or system settings.
+The API key is used only for optional labels (pool, spare, unused). The app does not need permission to change disks, pools, datasets, users, services, or system settings.
 
 The app uses these read-only API calls:
 
@@ -427,33 +427,43 @@ The app uses these read-only API calls:
 
 TrueNAS 25.04 and newer use user-linked API keys. API keys inherit the access rights of the selected user, so the safest setup is a dedicated low-privilege user.
 
-Quick guide:
+### Step 1: Create a dedicated user
 
-1. Log in to the TrueNAS web UI over HTTPS.
-2. Create or choose a dedicated user, for example `truenas_disk_map_ro`.
-3. Give that user the most limited read-only role available in your TrueNAS version.
-4. Open the top-right user/settings menu.
-5. Select `My API Keys`.
-6. Click `Add API Key`.
-7. Name it `truenas-disk-map`.
-8. Select the dedicated user if the form asks for one.
-9. Save the key.
-10. Copy the generated key immediately. TrueNAS shows it only once.
-11. Open this app, click `API Settings`, paste the key, and save.
+1. Log in to the TrueNAS web UI.
+2. Go to **Credentials → Users** and click **Add**.
+3. Fill in the form:
 
-Alternate path:
+| Field | Value |
+|---|---|
+| **Username** | `tdm-api` (or any name you prefer) |
+| **Password** | Set a strong password |
+| **Confirm Password** | Repeat the password |
+| **Disable Password** | **Unchecked** (must be off to set a password) |
+| **TrueNAS Access** | Checked, select **Readonly Admin** from the dropdown |
 
-```text
-Credentials -> Users -> select user -> View API Keys
-```
+4. Leave all other fields at their defaults (Full Name, Email, UID, Home Directory).
+5. Click **Save**.
 
-Important:
+### Step 2: Create an API key
 
-- Do not use a root or full-admin API key unless your TrueNAS version cannot create a lower-privilege key.
-- Treat API keys like passwords.
-- If you close the TrueNAS key dialog before copying the key, reset it and copy the new value.
+1. Go to **Credentials → Users**, click the `tdm-api` user you just created.
+2. Scroll to **API Keys** and click **Add**.
+3. Give it a name like `truenas-disk-map`.
+4. Click **Add**, then **copy the key immediately** — TrueNAS shows it only once.
 
-If your TrueNAS version does not expose a clear read-only role, leave API settings empty. The app will still work for slot mapping, SMART, SES detection, and identify LEDs.
+### Step 3: Configure the app
+
+1. Open the TrueNAS Disk Map web UI.
+2. Click **API Settings**.
+3. Enter the **API URL**: `https://your-truenas-ip/api/v2.0`
+4. Paste the **API Key** you copied.
+5. Click **Save**.
+
+The disk map will now show pool names, spare labels, and unused disk markers.
+
+> **Note:** The Readonly Admin role gives read access to pool membership, disk lists, and boot devices — exactly what the disk map needs. No write access to your TrueNAS.
+>
+> If your TrueNAS version does not have a Readonly Admin role, leave API settings empty. The app still works for slot mapping, SMART, SES detection, and identify LEDs.
 
 ## Troubleshooting
 
