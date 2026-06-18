@@ -628,30 +628,6 @@ html.theme-light{
 .hdd-tile.empty      .led-dot{ background:#fff; box-shadow:0 0 6px rgba(255,255,255,.7); }
 .hdd-tile.smart-unused .led-dot{  background:#2da8ff;  box-shadow:0 0 10px rgba(45,168,255,.9);}
 
-.status-badge{
-  position:absolute;
-  top:8px;
-  right:24px;
-  z-index:4;
-  padding:2px 7px;
-  border-radius:5px;
-  font-size:10px;
-  font-weight:800;
-  line-height:16px;
-  color:#052e16;
-  background:var(--status-ok);
-  box-shadow:0 4px 10px rgba(0,0,0,.24);
-}
-.status-badge.status-dead{ color:#fff; background:var(--status-dead); }
-.status-badge.status-critical{ color:#fff; background:var(--status-critical); }
-.status-badge.status-dangerous{ color:#fff; background:var(--status-dangerous); }
-.status-badge.status-suspect{ color:#111827; background:var(--status-suspect); }
-.status-badge.status-interface{ color:#fff; background:var(--status-interface); }
-.status-badge.status-maintenance{ color:#083344; background:var(--status-maintenance); }
-.status-badge.status-unknown{ color:#111827; background:var(--status-unknown); }
-.status-badge.status-info{ color:#fff; background:var(--status-info); }
-.panel-c1 .status-badge{ display:none; }
-
 .tile-led-toggle{
   position:absolute;
   top:8px;
@@ -1191,11 +1167,6 @@ html.theme-light .btn-outline-secondary{
 			>
           <div class="hdd-content">
             <span class="led-dot" aria-hidden="true"></span>
-            <?php if ($has): ?>
-              <span class="status-badge status-<?php echo htmlspecialchars($status_class); ?>">
-                <?php echo htmlspecialchars($status_name); ?>
-              </span>
-            <?php endif; ?>
             <?php if ($has && $cmd_on !== '' && $cmd_off !== ''): ?>
               <button type="button"
                       class="tile-led-toggle"
