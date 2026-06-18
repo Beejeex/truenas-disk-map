@@ -601,11 +601,23 @@ html.theme-light{
   width:auto;
 }
 /* Tile typography */
-.slot-label{ font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef; }
+.slot-label{
+  position:absolute; top:8px; left:10px;
+  z-index:3;
+  font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin:0; color:#e9ecef;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
 .name-label{ font-size:12px; color:#cbd3da; margin:2px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .meta-label{ font-size:11px; color:#9aa6b2; margin:1px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-.panel-c1 .slot-label{ font-size:14px; letter-spacing:.6px; }
+.panel-c1 .slot-label{
+  top:96%; left:45%; right:auto; bottom:auto;
+  transform-origin: left center;
+  transform: translateY(-50%) rotate(-90deg);
+  width:auto;
+  font-size:14px; letter-spacing:.6px;
+  background:none;
+}
 .panel-c1 .name-label{ font-size:13px; }
 .panel-c1 .meta-label{ display:none; }
 
@@ -631,7 +643,7 @@ html.theme-light{
 .tile-led-toggle{
   position:absolute;
   top:8px;
-  left:8px;
+  right:22px;
   z-index:4;
   min-width:34px;
   height:22px;
@@ -1167,6 +1179,7 @@ html.theme-light .btn-outline-secondary{
 			>
           <div class="hdd-content">
             <span class="led-dot" aria-hidden="true"></span>
+            <p class="slot-label"><?php echo $slotLabelHtml; ?></p>
             <?php if ($has && $cmd_on !== '' && $cmd_off !== ''): ?>
               <button type="button"
                       class="tile-led-toggle"
@@ -1177,7 +1190,6 @@ html.theme-light .btn-outline-secondary{
                       onclick="toggleTileLed(event, this)"><?php echo tdm_h('button.led_short'); ?></button>
             <?php endif; ?>
             <div class="hdd-overlay">
-              <p class="slot-label"><?php echo $slotLabelHtml; ?></p>
               <p class="name-label"><?php echo $labelText; ?></p>
               <?php if ($meta_summary !== ''): ?>
                 <p class="meta-label"><?php echo htmlspecialchars($meta_summary); ?></p>
