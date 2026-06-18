@@ -28,7 +28,8 @@ function get_device_by_serial($serial, $cache_file = "serial_cache.txt")
 
         list($s, $dev) = $parts;
 
-        if (strpos($s, $serial) === 0)
+        // Match: cache serial contains HDD serial or HDD serial contains cache serial
+        if (strpos($s, $serial) === 0 || strpos($serial, $s) === 0)
         {
             return $dev;
         }
