@@ -705,7 +705,7 @@ html.theme-light{
 .hdd-tile.status-dead .led-dot{ background:var(--status-dead); box-shadow:0 0 8px rgba(153,27,27,.85); }
 .hdd-tile.status-critical .led-dot{ background:var(--status-critical); box-shadow:0 0 8px rgba(239,68,68,.85); }
 .hdd-tile.smart-spare .led-dot{ background:#e9ecef; box-shadow:0 0 6px rgba(233,236,239,.6); }
-.hdd-tile.empty      .led-dot{ background:#fff; box-shadow:0 0 6px rgba(255,255,255,.7); }
+.hdd-tile.empty      .led-dot{ display:none; }
 .hdd-tile.smart-unused .led-dot{  background:#2da8ff;  box-shadow:0 0 10px rgba(45,168,255,.9);}
 
 .tile-led-toggle{
@@ -1329,10 +1329,6 @@ html.theme-light .btn-outline-secondary{
     <div class="legend-item">
       <span class="led-dot-legend smart-spare"></span>
       <span><?php echo tdm_h('legend.spare'); ?></span>
-    </div>
-    <div class="legend-item">
-      <span class="led-dot-legend empty"></span>
-      <span><?php echo tdm_h('legend.empty'); ?></span>
     </div>
     <div class="legend-item">
       <span class="led-dot-legend smart-unused"></span>
