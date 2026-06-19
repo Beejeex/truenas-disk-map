@@ -76,6 +76,7 @@ function tdm_status_slug($status)
 function tdm_status_class($smart)
 {
     $status = tdm_status_name($smart);
+    if ($status === 'EMPTY') return 'empty';
     if ($status === 'DEAD' || $status === 'CRITICAL') return 'smart-bad';
     if ($status === 'DANGEROUS') return 'smart-danger';
     if ($status === 'SUSPECT') return 'smart-warn';
