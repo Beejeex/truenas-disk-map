@@ -31,10 +31,15 @@ function tdm_parse_ses_join($sg_device)
     // sg_ses may exit non-zero even with valid output; check content instead
     if (trim($output) === '') return [];
 
+    $enclosure_id = '';
     $elements = [];
     $current_element = null;
 
     foreach (explode("\n", $output) as $line) {
+        // Capture primary enclosure logical identifier
+        if ($enclosure_id === '' && preg_match('/Primary enclosure logical identifier \(hex\):\s*([0-9a-f]+)/i', $line, $m)) {
+            $enclosure_id = '0x' . $m[1];
+        }
         // Match element header: "Slot00 [0,0]", "Slot 01 [0,0]", "Element 0 [0,0]"
         if (preg_match('/^(?:Slot|Element)\s*(\d+)\s*\[(\d+),(\d+)\]/i', $line, $m)) {
             if ($current_element !== null) {
@@ -64,7 +69,9 @@ function tdm_parse_ses_join($sg_device)
         $elements[$current_element['index']] = $current_element;
     }
 
-    return $elements;
+    // Attach enclosure identifier for filtering
+    $result = ['elements' => $elements, 'enclosure_id' => $enclosure_id];
+    return $result;
 }
 
 function tdm_parse_lsscsi_enclosures($output)

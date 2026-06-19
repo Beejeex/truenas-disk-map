@@ -52,7 +52,9 @@ foreach ($enclosures as $enc_index => $enc) {
     echo "[INFO] Enclosure " . $enc_index . ": " . $sg . " (" . ($enc['name'] ?? 'unknown') . ")\n";
 
     // Read SES element data
-    $ses_elements = tdm_parse_ses_join($sg);
+    $ses_result = tdm_parse_ses_join($sg);
+    $ses_elements = $ses_result['elements'] ?? [];
+    $enclosure_id = $ses_result['enclosure_id'] ?? '';
     if (empty($ses_elements)) {
         echo "[WARN]   Could not read SES elements — skipping.\n";
         continue;
@@ -61,24 +63,23 @@ foreach ($enclosures as $enc_index => $enc) {
     $total_slots = count($ses_elements);
     $populated = 0;
 
-    // Find the enclosure's own SAS address (same as "attached SAS address" on all bays)
-    // Count occurrences; the most frequent is the enclosure address, skip it.
-    $sas_freq = [];
-    foreach ($ses_elements as $elem) {
-        $a = $elem['sas_address'];
-        if ($a !== '' && $a !== '0x0') $sas_freq[$a] = ($sas_freq[$a] ?? 0) + 1;
-    }
-    arsort($sas_freq);
-    $enclosure_sas = !empty($sas_freq) ? array_key_first($sas_freq) : '';
-    if ($enclosure_sas && ($sas_freq[$enclosure_sas] ?? 0) < 2) $enclosure_sas = '';
-    if ($enclosure_sas) echo "[INFO]   Enclosure self-address " . $enclosure_sas . " (appears " . $sas_freq[$enclosure_sas] . "×) will be excluded.\n";
+    // Filter: enclosure self-reference element has SAS address == enclosure logical identifier
+    if ($enclosure_id) echo "[INFO]   Enclosure ID: " . $enclosure_id . "\n";
+
+    // Track which disks get matched (so we can find unmatched ones)
+    $unmatched_disks = $disk_sas_map;
 
     // Match disks to SES elements by SAS address
     $slot_assignments = []; // element_index => ['dev'=>..., 'serial'=>...] or null for empty
+    $enclosure_slot_index = null; // slot index that has enclosure SAS (firmware quirk)
     foreach ($ses_elements as $ei => $elem) {
         $elem_sas = $elem['sas_address'];
-        // Skip enclosure self-reference (same SAS as all bays' "attached" address)
-        if ($enclosure_sas && $elem_sas === $enclosure_sas) continue;
+        // Detect enclosure self-reference slot — will handle after the loop
+        if ($enclosure_id && strcasecmp($elem_sas, $enclosure_id) === 0) {
+            $enclosure_slot_index = $ei;
+            $slot_assignments[$ei] = null; // placeholder, may be filled by heuristic
+            continue;
+        }
         if ($elem_sas === '' || $elem_sas === '0x0') {
             $slot_assignments[$ei] = null;
             continue;
@@ -86,16 +87,48 @@ foreach ($enclosures as $enc_index => $enc) {
 
         // Find disk with matching SAS address
         $matched = null;
-        foreach ($disk_sas_map as $dev => $disk_sas) {
+        foreach ($unmatched_disks as $dev => $disk_sas) {
             if (strcasecmp($disk_sas, $elem_sas) === 0) {
                 $serial = tdm_get_smart_serial($dev);
                 if ($serial === '') $serial = "DEV-" . basename($dev);
                 $matched = ['dev' => $dev, 'serial' => $serial];
+                unset($unmatched_disks[$dev]);
                 break;
             }
         }
         $slot_assignments[$ei] = $matched;
         if ($matched) $populated++;
+    }
+
+    // Heuristic: enclosure self-reference slot may actually be a real bay
+    // with a misreported SAS address (LSI SAS2X36 firmware quirk).
+    // If exactly 1 disk remains unmatched, assign it to this slot.
+    if ($enclosure_slot_index !== null && count($unmatched_disks) === 1) {
+        $dev = array_key_first($unmatched_disks);
+        $serial = tdm_get_smart_serial($dev);
+        if ($serial === '') $serial = "DEV-" . basename($dev);
+        $slot_assignments[$enclosure_slot_index] = ['dev' => $dev, 'serial' => $serial, '_inferred' => true];
+        unset($unmatched_disks[$dev]);
+        $populated++;
+        echo "[INFO]   Enclosure slot #" . $enclosure_slot_index . " assigned unmatched disk " . $dev . " (SAS " . $disk_sas_map[$dev] . ") — firmware quirk.\n";
+    } elseif ($enclosure_slot_index !== null && count($unmatched_disks) > 1) {
+        // Multiple unmatched — leave enclosure slot as empty placeholder
+        echo "[INFO]   Enclosure slot #" . $enclosure_slot_index . " skipped (" . count($unmatched_disks) . " unmatched disks remain).\n";
+    }
+
+    // Write any remaining unmatched disks to an unmapped file
+    if (!empty($unmatched_disks)) {
+        $um_path = $target_dir . "/disk_unmapped.txt";
+        $um_fh = fopen($um_path, "w");
+        if ($um_fh) {
+            foreach ($unmatched_disks as $dev => $sas) {
+                $serial = tdm_get_smart_serial($dev);
+                if ($serial === '') $serial = "DEV-" . basename($dev);
+                fwrite($um_fh, $serial . "|" . $dev . "|" . $sas . "\n");
+            }
+            fclose($um_fh);
+            echo "[INFO]   " . count($unmatched_disks) . " unmapped disk(s) written to disk_unmapped.txt\n";
+        }
     }
 
     // Write HDD file
