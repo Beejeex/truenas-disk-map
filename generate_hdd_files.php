@@ -153,6 +153,7 @@ foreach ($controllers as $ctl)
     $slot = "";
     $serial = "";
     $is_hdd = false;
+    $written_slots = []; // track populated slots per enclosure for empty-fill
 
     $file = fopen($target_dir . "/hdd_c_$ctl", "w");
     if ($file === false)
@@ -192,6 +193,7 @@ foreach ($controllers as $ctl)
             {
                 fwrite($file, "$serial|$enclosure|$slot|$ctl\n");
                 $generated_rows++;
+                $written_slots[$enclosure][] = (int)$slot;
 
                 $enclosure = "";
                 $slot = "";
@@ -200,6 +202,23 @@ foreach ($controllers as $ctl)
             }
         }
     }
+
+    // Fill empty bays from SES
+    if (!empty($written_slots)) {
+        $ses_devs = tdm_detect_ses_devices();
+        foreach ($written_slots as $enc_idx => $slots) {
+            $ses_device = $ses_devs[$enc_idx] ?? null;
+            if (!$ses_device) continue;
+            $ses_elems = tdm_parse_ses_join($ses_device['sg']);
+            if (empty($ses_elems)) continue;
+            foreach ($ses_elems as $ei => $elem) {
+                if (in_array($ei, $slots)) continue;
+                fwrite($file, "EMPTY|$enc_idx|$ei|$ctl\n");
+                $generated_rows++;
+            }
+        }
+    }
+
     fclose($file);
 }
 

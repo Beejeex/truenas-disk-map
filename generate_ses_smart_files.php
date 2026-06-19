@@ -543,34 +543,6 @@ foreach ($source_files as $file)
             fwrite($out, implode("|", $fields) . "\n");
         }
 
-        // Fill empty bays from SES element data
-        $ses_sg = $ses_device ? $ses_device['sg'] : '';
-        $ses_elems = tdm_parse_ses_join($ses_sg);
-        if (!empty($ses_elems)) {
-            $filled = 0;
-            foreach ($ses_elems as $ei => $elem) {
-                $already_written = false;
-                foreach ($enclosure_to_lines[$enc] as $row) {
-                    if ((int)$row[2] === $ei) { $already_written = true; break; }
-                }
-                if ($already_written) continue;
-
-                $empty_fields = array(
-                    'EMPTY', 'Empty', $label, $ei, 'EMPTY', '', '',
-                    '', '', '', 0, '', 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0,
-                );
-                $empty_fields = array_map('tdm_clean_ses_field', $empty_fields);
-                fwrite($out, implode("|", $empty_fields) . "\n");
-                $filled++;
-            }
-            if ($filled > 0) {
-                echo "[INFO] Filled " . $filled . " empty bays from SES for enclosure " . $enc . " (" . $ses_sg . ")\n";
-            }
-        } else {
-            echo "[INFO] No SES element data for " . $ses_sg . " (sg_ses may not be available)\n";
-        }
-
         fclose($out);
         $generated++;
         $mapped[] = array(
