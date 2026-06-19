@@ -24,12 +24,13 @@ function tdm_run_command(array $argv, &$exit_code = null)
  */
 function tdm_parse_ses_join($sg_device)
 {
-    if (!tdm_is_safe_sg_device($sg_device)) return [];
+    $empty_result = ['elements' => [], 'enclosure_id' => ''];
+
+    if (!tdm_is_safe_sg_device($sg_device)) return $empty_result;
 
     $code = 0;
     $output = tdm_run_command(['sudo', '/usr/bin/sg_ses', '--join', $sg_device], $code);
-    // sg_ses may exit non-zero even with valid output; check content instead
-    if (trim($output) === '') return [];
+    if (trim($output) === '') return $empty_result;
 
     $enclosure_id = '';
     $elements = [];
@@ -70,8 +71,7 @@ function tdm_parse_ses_join($sg_device)
     }
 
     // Attach enclosure identifier for filtering
-    $result = ['elements' => $elements, 'enclosure_id' => $enclosure_id];
-    return $result;
+    return ['elements' => $elements, 'enclosure_id' => $enclosure_id, '_version' => 2];
 }
 
 function tdm_parse_lsscsi_enclosures($output)
