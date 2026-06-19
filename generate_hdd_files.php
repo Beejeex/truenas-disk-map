@@ -61,10 +61,24 @@ foreach ($enclosures as $enc_index => $enc) {
     $total_slots = count($ses_elements);
     $populated = 0;
 
+    // Find the enclosure's own SAS address (same as "attached SAS address" on all bays)
+    // Count occurrences; the most frequent is the enclosure address, skip it.
+    $sas_freq = [];
+    foreach ($ses_elements as $elem) {
+        $a = $elem['sas_address'];
+        if ($a !== '' && $a !== '0x0') $sas_freq[$a] = ($sas_freq[$a] ?? 0) + 1;
+    }
+    arsort($sas_freq);
+    $enclosure_sas = !empty($sas_freq) ? array_key_first($sas_freq) : '';
+    if ($enclosure_sas && ($sas_freq[$enclosure_sas] ?? 0) < 2) $enclosure_sas = '';
+    if ($enclosure_sas) echo "[INFO]   Enclosure self-address " . $enclosure_sas . " (appears " . $sas_freq[$enclosure_sas] . "×) will be excluded.\n";
+
     // Match disks to SES elements by SAS address
     $slot_assignments = []; // element_index => ['dev'=>..., 'serial'=>...] or null for empty
     foreach ($ses_elements as $ei => $elem) {
         $elem_sas = $elem['sas_address'];
+        // Skip enclosure self-reference (same SAS as all bays' "attached" address)
+        if ($enclosure_sas && $elem_sas === $enclosure_sas) continue;
         if ($elem_sas === '' || $elem_sas === '0x0') {
             $slot_assignments[$ei] = null;
             continue;
