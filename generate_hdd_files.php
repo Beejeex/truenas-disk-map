@@ -206,8 +206,10 @@ foreach ($controllers as $ctl)
     // Fill empty bays from SES
     if (!empty($written_slots)) {
         $ses_devs = tdm_detect_ses_devices();
+        $ses_idx = 0;
         foreach ($written_slots as $enc_idx => $slots) {
-            $ses_device = $ses_devs[$enc_idx] ?? null;
+            $ses_device = $ses_devs[$ses_idx] ?? null;
+            $ses_idx++;
             if (!$ses_device) continue;
             $ses_elems = tdm_parse_ses_join($ses_device['sg']);
             if (empty($ses_elems)) continue;
