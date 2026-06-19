@@ -35,8 +35,8 @@ function tdm_parse_ses_join($sg_device)
     $current_element = null;
 
     foreach (explode("\n", $output) as $line) {
-        // Match element header: "Slot00 [0,0]" or "Element 0 [0,0]"
-        if (preg_match('/^(?:Slot|Element\s*)?(\d+)\s*\[(\d+),(\d+)\]/i', $line, $m)) {
+        // Match element header: "Slot00 [0,0]", "Slot 01 [0,0]", "Element 0 [0,0]"
+        if (preg_match('/^(?:Slot|Element)\s*(\d+)\s*\[(\d+),(\d+)\]/i', $line, $m)) {
             if ($current_element !== null) {
                 $elements[$current_element['index']] = $current_element;
             }
