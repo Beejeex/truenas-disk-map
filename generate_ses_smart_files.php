@@ -28,16 +28,13 @@ function get_device_by_serial($serial, $cache_file = "serial_cache.txt")
 
         list($s, $dev) = $parts;
 
-        // Match by prefix (handles sas3ircu shortened serials)
-        if (strpos($s, $serial) === 0)
-        {
-            return $dev;
-        }
-        // Also try without hyphens (sas3ircu often drops WD- prefix hyphen)
-        if (strpos(str_replace('-', '', $s), str_replace('-', '', $serial)) === 0)
-        {
-            return $dev;
-        }
+        // Exact match first (sas3ircu gives full serials)
+        if ($s === $serial) return $dev;
+        // Prefix match (handles smartctl --scan shortened serials)
+        if (strpos($s, $serial) === 0) return $dev;
+        // Match without hyphens (sas3ircu sometimes drops WD- prefix)
+        if (str_replace('-', '', $s) === str_replace('-', '', $serial)) return $dev;
+        if (strpos(str_replace('-', '', $s), str_replace('-', '', $serial)) === 0) return $dev;
     }
 
     return "N/A";
