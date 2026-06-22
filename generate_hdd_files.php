@@ -231,6 +231,31 @@ function tdm_disk_label(array $disk)
     return $disk['dev'] . ' [target ' . $target . ']';
 }
 
+function tdm_disk_labels(array $disks, $limit = 8)
+{
+    $labels = [];
+    $count = count($disks);
+    $shown = 0;
+
+    foreach ($disks as $disk)
+    {
+        if ($shown >= $limit)
+        {
+            break;
+        }
+
+        $labels[] = tdm_disk_label($disk);
+        $shown++;
+    }
+
+    if ($count > $limit)
+    {
+        $labels[] = '+' . ($count - $limit) . ' more';
+    }
+
+    return implode(', ', $labels);
+}
+
 function tdm_assign_disk_to_slot(array &$ctx, $slot, array $disk, $method, array &$assigned_devs)
 {
     $dev = $disk['dev'];
@@ -298,6 +323,65 @@ function tdm_exact_hctl_slot_candidates(array $contexts, array $disk)
     }
 
     return $candidates;
+}
+
+function tdm_unassigned_disk_has_ses_evidence(array $disk, array $contexts, array $disk_sas_map)
+{
+    $dev = $disk['dev'];
+    $disk_sas = strtolower(trim($disk_sas_map[$dev] ?? ''));
+    if (tdm_sas_is_real($disk_sas))
+    {
+        foreach ($contexts as $ctx)
+        {
+            foreach ($ctx['slots'] as $slot_info)
+            {
+                $slot_sas = strtolower(trim($slot_info['sas_address'] ?? ''));
+                if (tdm_sas_is_real($slot_sas) && strcasecmp($slot_sas, $disk_sas) === 0)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+
+    $target = isset($disk['target']) && $disk['target'] !== null ? (int)$disk['target'] : null;
+    $domain = tdm_hctl_domain_key($disk);
+    if ($target === null || $domain === '')
+    {
+        return false;
+    }
+
+    foreach ($contexts as $ctx)
+    {
+        if (empty($ctx['range_accepted']) || empty($ctx['hctl_range']))
+        {
+            continue;
+        }
+
+        $range = $ctx['hctl_range'];
+        if ($range['domain'] !== $domain || $target < (int)$range['range_start'] || $target > (int)$range['range_end'])
+        {
+            continue;
+        }
+
+        $slot_numbers = array_keys($ctx['slots']);
+        sort($slot_numbers, SORT_NUMERIC);
+        $position = $target - (int)$range['range_start'];
+        if (!isset($slot_numbers[$position]))
+        {
+            continue;
+        }
+
+        $slot = $slot_numbers[$position];
+        if (($ctx['assignments'][$slot] ?? null) !== null)
+        {
+            return false;
+        }
+
+        return isset($ctx['slots'][$slot]) && tdm_ses_status_is_installed($ctx['slots'][$slot]);
+    }
+
+    return false;
 }
 
 $target_dir = __DIR__ . '/disk_data';
@@ -537,15 +621,7 @@ foreach ($disks as $disk)
 $total_rows = 0;
 $file_index = 0;
 $unmapped = [];
-$enclosure_domains = [];
-foreach ($contexts as $ctx)
-{
-    $domain = tdm_hctl_domain_key($ctx['enc']);
-    if ($domain !== '')
-    {
-        $enclosure_domains[$domain] = true;
-    }
-}
+$ignored_visible = [];
 
 foreach ($contexts as $ctx)
 {
@@ -597,11 +673,18 @@ foreach ($contexts as $ctx)
 
 foreach ($disks as $disk)
 {
-    $domain = tdm_hctl_domain_key($disk);
-    if (!isset($assigned_devs[$disk['dev']]) && isset($enclosure_domains[$domain]))
+    if (isset($assigned_devs[$disk['dev']]))
+    {
+        continue;
+    }
+
+    if (tdm_unassigned_disk_has_ses_evidence($disk, $contexts, $disk_sas_map))
     {
         $unmapped[] = $disk;
+        continue;
     }
+
+    $ignored_visible[] = $disk;
 }
 
 if (!empty($unmapped))
@@ -620,13 +703,12 @@ if (!empty($unmapped))
         fclose($um_fh);
     }
 
-    $labels = [];
-    foreach ($unmapped as $disk)
-    {
-        $labels[] = tdm_disk_label($disk);
-    }
-    echo '[WARN] ' . count($unmapped) . ' visible disk(s) could not be mapped to a SES slot: ' . implode(', ', $labels) . ".\n";
+    echo '[WARN] ' . count($unmapped) . ' visible disk(s) have SES evidence but could not be mapped to a slot: ' . tdm_disk_labels($unmapped) . ".\n";
     echo '[INFO]   Unmapped disk details written to disk_unmapped.txt.' . "\n";
+}
+if (!empty($ignored_visible))
+{
+    echo '[INFO] ' . count($ignored_visible) . ' visible disk(s) ignored because they have no unmapped SES bay evidence: ' . tdm_disk_labels($ignored_visible) . ".\n";
 }
 
 echo "\n[OK] HDD files generated. Total rows: " . $total_rows . ".\n";
