@@ -50,6 +50,8 @@ function tdm_parse_ses_join($sg_device)
                 'index' => (int)$m[1],
                 'device_slot_number' => (int)$m[1],
                 'sas_address' => '',
+                'attached_sas_address' => '',
+                'status' => '',
                 'installed' => false,
             ];
         }
@@ -58,12 +60,19 @@ function tdm_parse_ses_join($sg_device)
             $current_element['device_slot_number'] = (int)$m[1];
         }
         // SAS address
-        elseif ($current_element && preg_match('/SAS address:\s*(0x[0-9a-f]+)/i', $line, $m)) {
+        elseif ($current_element && preg_match('/attached SAS address:\s*(0x[0-9a-f]+)/i', $line, $m)) {
+            $current_element['attached_sas_address'] = $m[1];
+        }
+        // SAS address
+        elseif ($current_element && preg_match('/^\s*SAS address:\s*(0x[0-9a-f]+)/i', $line, $m)) {
             $current_element['sas_address'] = $m[1];
         }
-        // installed check
-        elseif ($current_element && preg_match('/status:\s*(OK|Installed)/i', $line, $m)) {
-            $current_element['installed'] = true;
+        // status / installed check
+        elseif ($current_element && preg_match('/status:\s*([^,]+?)(?:,|$)/i', $line, $m)) {
+            $current_element['status'] = trim($m[1]);
+            if (preg_match('/^(OK|Installed)$/i', $current_element['status'])) {
+                $current_element['installed'] = true;
+            }
         }
     }
     if ($current_element !== null) {
