@@ -537,6 +537,15 @@ foreach ($disks as $disk)
 $total_rows = 0;
 $file_index = 0;
 $unmapped = [];
+$enclosure_domains = [];
+foreach ($contexts as $ctx)
+{
+    $domain = tdm_hctl_domain_key($ctx['enc']);
+    if ($domain !== '')
+    {
+        $enclosure_domains[$domain] = true;
+    }
+}
 
 foreach ($contexts as $ctx)
 {
@@ -588,7 +597,8 @@ foreach ($contexts as $ctx)
 
 foreach ($disks as $disk)
 {
-    if (!isset($assigned_devs[$disk['dev']]) && tdm_hctl_domain_key($disk) !== '')
+    $domain = tdm_hctl_domain_key($disk);
+    if (!isset($assigned_devs[$disk['dev']]) && isset($enclosure_domains[$domain]))
     {
         $unmapped[] = $disk;
     }

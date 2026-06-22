@@ -20,7 +20,7 @@ function tdm_run_command(array $argv, &$exit_code = null)
 
 /**
  * Parse sg_ses --join output to extract slot element data.
- * Returns array of element_index => [device_slot_number, sas_address, installed]
+ * Returns array of element_index => [device_slot_number, sas_address, attached_sas_address, status, installed]
  */
 function tdm_parse_ses_join($sg_device)
 {
@@ -54,6 +54,11 @@ function tdm_parse_ses_join($sg_device)
                 'status' => '',
                 'installed' => false,
             ];
+        }
+        // Any other SES element header means we have left the previous slot.
+        elseif ($current_element && preg_match('/\[[0-9]+,-?[0-9]+\]\s+Element type:/i', $line)) {
+            $elements[$current_element['index']] = $current_element;
+            $current_element = null;
         }
         // device slot number
         elseif ($current_element && preg_match('/device slot number:\s*(\d+)/i', $line, $m)) {
