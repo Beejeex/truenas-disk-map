@@ -448,16 +448,6 @@ foreach ($files as $file)
 .tile-hit { outline-color: rgba(45,168,255,.9) !important; box-shadow: 0 0 0 2px rgba(45,168,255,.3) inset; }
 
 
-
-/* By default, show short pool names and hide full pool names. */
-.pool-full { display: none; }
-.pool-short { display: inline; }
-
-/* When body has .show-full-pool, reverse the visibility. */
-.show-full-pool .pool-full { display: inline; }
-.show-full-pool .pool-short { display: none; }
-
-
 :root{
   --c1-scale: calc(685 / 202);
   --c1-unscale: calc(202 / 685);
@@ -991,13 +981,6 @@ html.theme-light .btn-outline-secondary{
   <div class="text-light font-weight-bold"><?php echo tdm_h('display.options'); ?></div>
 
   <div class="display-options-controls">
-    <div class="text-light">
-      <label class="mb-0" style="cursor:pointer">
-        <input type="checkbox" id="toggleShort" checked>
-        <span class="ml-2"><?php echo tdm_h('display.hide_full_pool_names'); ?></span>
-      </label>
-    </div>
-
     <div class="input-group" style="width:340px">
       <input id="diskSearch" type="text" class="form-control form-control-sm"
              placeholder="<?php echo tdm_h('search.placeholder'); ?>">
@@ -1201,10 +1184,7 @@ html.theme-light .btn-outline-secondary{
 			// Slot label with optional pool and VDEV/SPARE/UNUSED tags.
 			$slotLabelHtml = 'Slot #' . (int)$slotnum;
 			if ($pool_name !== '' && $pool_name !== 'UNUSED') {
-				$slotLabelHtml .= ' ['
-					. '<span class="pool-short">' . htmlspecialchars($pool_name_short) . '</span>'
-					. '<span class="pool-full">'  . htmlspecialchars($pool_name)        . '</span>'
-					. ']';
+				$slotLabelHtml .= ' [' . htmlspecialchars($pool_name_short) . ']';
 			}
 			// VDEV type label (color-coded by index)
 			if ($dev_short !== '' && isset($vdev_by_disk[$dev_short]) && !$is_unused) {
@@ -1909,16 +1889,6 @@ $(function(){
 
 <script>
 (function() {
-  // Toggle full pool names.
-  var chk = document.getElementById('toggleShort');
-  if (chk) {
-    document.body.classList.remove('show-full-pool');
-    chk.addEventListener('change', function(){
-      if (chk.checked) document.body.classList.remove('show-full-pool');
-      else document.body.classList.add('show-full-pool');
-    });
-  }
-
   // Search and pool filtering.
   var input   = document.getElementById('diskSearch');
   var btnClr  = document.getElementById('btnClearSearch');

@@ -37,7 +37,6 @@ return array(
     'app.version' => 'Version {version}',
 
     'display.options' => 'Display options',
-    'display.hide_full_pool_names' => 'Hide full pool names',
     'search.placeholder' => 'search: serial, sdX, model, or size',
     'button.clear' => 'Clear',
     'button.reset' => 'Reset',
