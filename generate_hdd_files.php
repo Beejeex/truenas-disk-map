@@ -1,17 +1,196 @@
 <?php
-// generate_hdd_files.php — Unified SAS-address-based disk-to-enclosure mapping.
+// generate_hdd_files.php — Generic disk-to-enclosure mapping.
 //
 // Pipeline:
-//   1. lsscsi -g  → enclosures (SES /dev/sgX)
-//   2. lsscsi -t  → SAS addresses per disk
-//   3. sg_ses --join → SES elements per enclosure (bay count + SAS address per bay)
-//   4. Match: SES element SAS address ↔ disk SAS address
-//   5. Write HDD files: SERIAL|ENC_INDEX|PHYSICAL_SLOT|FILE_INDEX
+//   1. lsscsi -g  -> disks and enclosures
+//   2. If the HCTL target layout clearly exposes bays, use target ranges.
+//   3. Otherwise, use lsscsi -t plus sg_ses --join SAS address matching.
+//   4. Write HDD files: SERIAL|ENC_INDEX|PHYSICAL_SLOT|FILE_INDEX
 //
-// No sas3ircu. No SCSI target guessing. No serial prefix matching.
-// SAS addresses are hardware-assigned and never change.
+// No sas3ircu. No serial prefix matching.
 
 require_once __DIR__ . "/hardware_helpers.php";
+
+function tdm_hctl_domain_key(array $row)
+{
+    if (!isset($row['host']) || !isset($row['channel']) || $row['host'] === null || $row['channel'] === null)
+    {
+        return '';
+    }
+
+    return (int)$row['host'] . ':' . (int)$row['channel'];
+}
+
+function tdm_format_number_ranges(array $numbers)
+{
+    $numbers = array_values(array_unique(array_map('intval', $numbers)));
+    sort($numbers, SORT_NUMERIC);
+
+    if (empty($numbers))
+    {
+        return 'none';
+    }
+
+    $ranges = [];
+    $start = $numbers[0];
+    $prev = $numbers[0];
+
+    for ($i = 1; $i < count($numbers); $i++)
+    {
+        $n = $numbers[$i];
+        if ($n === $prev + 1)
+        {
+            $prev = $n;
+            continue;
+        }
+
+        $ranges[] = ($start === $prev) ? (string)$start : ($start . '-' . $prev);
+        $start = $n;
+        $prev = $n;
+    }
+
+    $ranges[] = ($start === $prev) ? (string)$start : ($start . '-' . $prev);
+
+    return implode(',', $ranges);
+}
+
+function tdm_build_hctl_slot_maps(array $disks, array $enclosures)
+{
+    $disks_by_domain = [];
+    foreach ($disks as $disk)
+    {
+        $domain = tdm_hctl_domain_key($disk);
+        if ($domain === '' || !isset($disk['target']) || $disk['target'] === null)
+        {
+            continue;
+        }
+
+        $disks_by_domain[$domain][] = $disk;
+    }
+
+    $enclosures_by_domain = [];
+    foreach ($enclosures as $enc)
+    {
+        $domain = tdm_hctl_domain_key($enc);
+        if ($domain === '' || !isset($enc['target']) || $enc['target'] === null)
+        {
+            continue;
+        }
+
+        $enclosures_by_domain[$domain][] = $enc;
+    }
+
+    $maps = [];
+    foreach ($enclosures_by_domain as $domain => $domain_enclosures)
+    {
+        usort($domain_enclosures, function ($a, $b) {
+            return ((int)$a['target']) <=> ((int)$b['target']);
+        });
+
+        $domain_disks = $disks_by_domain[$domain] ?? [];
+        $domain_targets = [];
+        foreach ($domain_disks as $disk)
+        {
+            if (isset($disk['target']) && $disk['target'] !== null)
+            {
+                $domain_targets[] = (int)$disk['target'];
+            }
+        }
+
+        $candidate_maps = [];
+        $covered_targets = [];
+        $previous_enclosure_target = -1;
+        $domain_is_clear = true;
+
+        foreach ($domain_enclosures as $enc)
+        {
+            $enc_target = (int)$enc['target'];
+            $range_start = $previous_enclosure_target + 1;
+            $range_end = $enc_target - 1;
+            $slot_count = $range_end - $range_start + 1;
+            $previous_enclosure_target = $enc_target;
+
+            if ($slot_count <= 0)
+            {
+                continue;
+            }
+
+            $assignments = array_fill(0, $slot_count, null);
+            $present_targets = [];
+            $slot_map_parts = [];
+            $duplicate_slot = false;
+
+            foreach ($domain_disks as $disk)
+            {
+                $target = (int)$disk['target'];
+                if ($target < $range_start || $target > $range_end)
+                {
+                    continue;
+                }
+
+                $slot = $target - $range_start;
+                if ($assignments[$slot] !== null)
+                {
+                    $duplicate_slot = true;
+                    break;
+                }
+
+                $assignments[$slot] = $disk;
+                $present_targets[] = $target;
+                $covered_targets[] = $target;
+            }
+
+            if ($duplicate_slot || empty($present_targets))
+            {
+                $domain_is_clear = false;
+                continue;
+            }
+
+            $empty_slots = [];
+            for ($slot = 0; $slot < $slot_count; $slot++)
+            {
+                if ($assignments[$slot] === null)
+                {
+                    $empty_slots[] = $slot;
+                    $slot_map_parts[] = $slot . '=EMPTY';
+                }
+                else
+                {
+                    $slot_map_parts[] = $slot . '=' . $assignments[$slot]['dev'];
+                }
+            }
+
+            $candidate_maps[(int)$enc['index']] = [
+                'assignments' => $assignments,
+                'domain' => $domain,
+                'range_start' => $range_start,
+                'range_end' => $range_end,
+                'slot_count' => $slot_count,
+                'present_targets' => $present_targets,
+                'empty_slots' => $empty_slots,
+                'slot_map' => implode(', ', $slot_map_parts),
+            ];
+        }
+
+        $uncovered_targets = array_values(array_diff(
+            array_values(array_unique($domain_targets)),
+            array_values(array_unique($covered_targets))
+        ));
+
+        if (!$domain_is_clear || !empty($uncovered_targets))
+        {
+            continue;
+        }
+
+        foreach ($candidate_maps as $enc_index => $map)
+        {
+            $map['accepted_reason'] = 'all disk targets in HCTL domain ' . $domain . ' are covered by enclosure-delimited bay ranges';
+            $maps[$enc_index] = $map;
+        }
+    }
+
+    return $maps;
+}
 
 $target_dir = __DIR__ . "/disk_data";
 if (!is_dir($target_dir)) {
@@ -42,6 +221,7 @@ $transport = tdm_parse_lsscsi_transport();
 $disk_sas_map = $transport['disks'];
 
 echo "[INFO] " . count($disk_sas_map) . " disk SAS addresses resolved.\n";
+$hctl_slot_maps = tdm_build_hctl_slot_maps($detected['disks'], $enclosures);
 
 // ── Phase 3+4: Per enclosure: read SES, match SAS addresses, write HDD ──
 $total_rows = 0;
@@ -50,7 +230,35 @@ $file_index = 0;
 foreach ($enclosures as $enc_index => $enc) {
     $sg = $enc['sg'];
     echo "[INFO] Enclosure " . $enc_index . ": " . $sg . " (" . ($enc['name'] ?? 'unknown') . ")\n";
+    $ses_elements = [];
 
+    $hctl_map = $hctl_slot_maps[(int)$enc['index']] ?? null;
+    if ($hctl_map !== null) {
+        echo "[INFO]   Generic HCTL target-range layout accepted.\n";
+        echo "[INFO]     Evidence: " . $hctl_map['accepted_reason'] . ".\n";
+        echo "[INFO]     Enclosure HCTL: [" . $enc['hctl'] . "] target " . (int)$enc['target'] . ".\n";
+        echo "[INFO]     Bay target range: " . $hctl_map['range_start'] . ".." . $hctl_map['range_end'] . " (slot = target - " . $hctl_map['range_start'] . ").\n";
+        echo "[INFO]     Present disk targets: " . tdm_format_number_ranges($hctl_map['present_targets']) . ".\n";
+        echo "[INFO]     Empty slots inferred from missing targets: " . tdm_format_number_ranges($hctl_map['empty_slots']) . ".\n";
+        echo "[INFO]     Slot map: " . $hctl_map['slot_map'] . ".\n";
+
+        $slot_assignments = [];
+        $populated = 0;
+        foreach ($hctl_map['assignments'] as $slot => $disk) {
+            if ($disk === null) {
+                $slot_assignments[$slot] = null;
+                continue;
+            }
+
+            $serial = tdm_get_smart_serial($disk['dev']);
+            if ($serial === '') $serial = "DEV-" . basename($disk['dev']);
+            $slot_assignments[$slot] = ['dev' => $disk['dev'], 'serial' => $serial];
+            $populated++;
+        }
+
+        $total_slots = count($slot_assignments);
+    }
+    else {
     // Read SES element data
     $ses_result = tdm_parse_ses_join($sg);
     $ses_elements = $ses_result['elements'] ?? [];
@@ -68,6 +276,7 @@ foreach ($enclosures as $enc_index => $enc) {
 
     // Track which disks get matched (so we can find unmatched ones)
     $unmatched_disks = $disk_sas_map;
+    $matched_by_sas = 0;
 
     // Match disks to SES elements by SAS address
     $slot_assignments = []; // element_index => ['dev'=>..., 'serial'=>...] or null for empty
@@ -97,12 +306,15 @@ foreach ($enclosures as $enc_index => $enc) {
             }
         }
         $slot_assignments[$ei] = $matched;
-        if ($matched) $populated++;
+        if ($matched) {
+            $populated++;
+            $matched_by_sas++;
+        }
     }
 
-    // Heuristic: enclosure self-reference slot may actually be a real bay
-    // with a misreported SAS address (LSI SAS2X36 firmware quirk).
-    // If exactly 1 disk remains unmatched, assign it to this slot.
+    // Heuristic: the SES element that reports the enclosure SAS address may
+    // represent a real bay on some expanders. Keep the log explicit that this
+    // assignment is inferred rather than a confirmed SES SAS match.
     if ($enclosure_slot_index !== null && count($unmatched_disks) === 1) {
         $dev = array_key_first($unmatched_disks);
         $serial = tdm_get_smart_serial($dev);
@@ -110,10 +322,13 @@ foreach ($enclosures as $enc_index => $enc) {
         $slot_assignments[$enclosure_slot_index] = ['dev' => $dev, 'serial' => $serial, '_inferred' => true];
         unset($unmatched_disks[$dev]);
         $populated++;
-        echo "[INFO]   Enclosure slot #" . $enclosure_slot_index . " assigned unmatched disk " . $dev . " (SAS " . $disk_sas_map[$dev] . ") — firmware quirk.\n";
+        echo "[INFO]   SES self-reference element detected: element #" . $enclosure_slot_index . " reports enclosure ID " . $enclosure_id . ".\n";
+        echo "[INFO]   SAS matching resolved " . $matched_by_sas . " disk(s); exactly one disk remained unmatched: " . $dev . " (SAS " . $disk_sas_map[$dev] . ").\n";
+        echo "[INFO]   Inferred element #" . $enclosure_slot_index . " -> " . $dev . " (heuristic, not a confirmed SAS match).\n";
     } elseif ($enclosure_slot_index !== null && count($unmatched_disks) > 1) {
         // Multiple unmatched — leave enclosure slot as empty placeholder
-        echo "[INFO]   Enclosure slot #" . $enclosure_slot_index . " skipped (" . count($unmatched_disks) . " unmatched disks remain).\n";
+        echo "[INFO]   SES self-reference element detected: element #" . $enclosure_slot_index . " reports enclosure ID " . $enclosure_id . ".\n";
+        echo "[INFO]   Leaving it empty because " . count($unmatched_disks) . " unmatched disks remain.\n";
     }
 
     // Write any remaining unmatched disks to an unmapped file
@@ -130,6 +345,7 @@ foreach ($enclosures as $enc_index => $enc) {
             echo "[INFO]   " . count($unmatched_disks) . " unmapped disk(s) written to disk_unmapped.txt\n";
         }
     }
+    }
 
     // Write HDD file
     $out_path = $target_dir . "/hdd_c_" . $file_index;
@@ -142,7 +358,7 @@ foreach ($enclosures as $enc_index => $enc) {
     $rows = 0;
     foreach ($slot_assignments as $ei => $disk) {
         $serial = $disk ? $disk['serial'] : 'EMPTY';
-        $slot_num = isset($ses_elements[$ei]['device_slot_number'])
+        $slot_num = isset($ses_elements) && isset($ses_elements[$ei]['device_slot_number'])
             ? (int)$ses_elements[$ei]['device_slot_number']
             : (int)$ei;
         fwrite($fh, $serial . "|" . $enc_index . "|" . $slot_num . "|" . $file_index . "\n");
