@@ -142,8 +142,10 @@ foreach ($enclosures as $enc_index => $enc) {
     $rows = 0;
     foreach ($slot_assignments as $ei => $disk) {
         $serial = $disk ? $disk['serial'] : 'EMPTY';
-        $bay = $ei - 1; // 0-based bay number (SES element index is 1-based)
-        fwrite($fh, $serial . "|" . $enc_index . "|" . $bay . "|" . $file_index . "\n");
+        $slot_num = isset($ses_elements[$ei]['device_slot_number'])
+            ? (int)$ses_elements[$ei]['device_slot_number']
+            : (int)$ei;
+        fwrite($fh, $serial . "|" . $enc_index . "|" . $slot_num . "|" . $file_index . "\n");
         $rows++;
     }
     fclose($fh);

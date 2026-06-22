@@ -369,6 +369,51 @@ function get_smart_status($dev)
     return $report['status'];
 }
 
+function tdm_ses_devices_by_index(array $ses_devs)
+{
+    $by_index = array();
+
+    foreach ($ses_devs as $offset => $ses_device)
+    {
+        if (isset($ses_device['index']) && is_numeric($ses_device['index']))
+        {
+            $by_index[(int)$ses_device['index']] = $ses_device;
+        }
+
+        $by_index[(int)$offset] = $ses_device;
+    }
+
+    return $by_index;
+}
+
+function tdm_select_ses_device(array $ses_devs, array $ses_by_index, $enclosure, $source_index = null)
+{
+    if (is_numeric($enclosure))
+    {
+        $enc_index = (int)$enclosure;
+        if (isset($ses_by_index[$enc_index]))
+        {
+            return $ses_by_index[$enc_index];
+        }
+    }
+
+    if (is_numeric($source_index))
+    {
+        $file_index = (int)$source_index;
+        if (isset($ses_by_index[$file_index]))
+        {
+            return $ses_by_index[$file_index];
+        }
+    }
+
+    if (count($ses_devs) === 1)
+    {
+        return $ses_devs[0];
+    }
+
+    return null;
+}
+
 
 
 
@@ -389,6 +434,7 @@ if (empty($ses_devs))
 {
     $warnings[] = "No SES enclosure was detected by lsscsi -g. LED commands will be left empty.";
 }
+$ses_by_index = tdm_ses_devices_by_index($ses_devs);
 
 $controllers = array();
 $controllers_file = __DIR__ . "/controllers.txt";
@@ -399,11 +445,14 @@ if (is_file($controllers_file))
 
 $generated = 0;
 $mapped = array();
-$enc_counter = 0; // global counter for SES device assignment
 $source_files = glob($target_dir . "/hdd_c_*");
 if ($source_files === false)
 {
     $source_files = array();
+}
+else
+{
+    usort($source_files, 'strnatcasecmp');
 }
 
 foreach ($source_files as $file)
@@ -457,16 +506,9 @@ foreach ($source_files as $file)
 
     foreach ($enc_keys as $enc_index => $enc)
     {
-        $ses_device = null;
-        // Assign SES devices sequentially across all enclosure groups
-        if (isset($ses_devs[$enc_counter])) {
-            $ses_device = $ses_devs[$enc_counter];
-        } elseif (count($ses_devs) === 1) {
-            $ses_device = $ses_devs[0];
-        }
-        $enc_counter++;
+        $ses_device = tdm_select_ses_device($ses_devs, $ses_by_index, $enc, $ctrl);
 
-        $fallback_label = "Controller " . $ctrl . " Enclosure " . $enc;
+        $fallback_label = "Enclosure " . $enc;
         $label = tdm_enclosure_label($ses_device, $fallback_label);
         $slug = strtolower(preg_replace('/[^A-Za-z0-9]+/', '_', $fallback_label));
         $slug = trim($slug, '_');
@@ -544,6 +586,8 @@ foreach ($source_files as $file)
         $generated++;
         $mapped[] = array(
             'controller' => $ctrl,
+            'source_index' => $ctrl,
+            'source_file' => basename($file),
             'enclosure' => $enc,
             'ses_device' => $ses_device,
             'output_file' => basename($output_file),
@@ -551,7 +595,7 @@ foreach ($source_files as $file)
 
         if ($ses_device === null)
         {
-            $warnings[] = "No SES device was available for controller " . $ctrl . ", enclosure " . $enc . ".";
+            $warnings[] = "No SES device was available for source file " . basename($file) . ", enclosure " . $enc . ".";
         }
     }
 }
